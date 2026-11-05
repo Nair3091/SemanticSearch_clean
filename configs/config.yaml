@@ -1,0 +1,26 @@
+# Central config — edit here, not hardcoded in modules.
+# Anyone changing a default should update this file so the whole team stays in sync.
+
+query_understanding:
+  qwen3_model_name: "Qwen/Qwen3-8B"   # placeholder, confirm exact checkpoint
+  max_sub_queries: 5
+
+vision_retrieval:
+  clip_model_name: "openai/clip-vit-large-patch14"
+  pass1_interval_seconds: 2.0
+  pass2_interval_seconds: 0.25
+  top_k_windows: 5
+  faiss_index_path: "data/faiss_index/index.faiss"
+  window_radius_seconds: 3.0
+
+fusion_confidence:
+  aggregation: "min"
+  confidence_threshold: 0.28   # calibrate against NegBench/QVHighlights dev set
+
+recovery:
+  max_retries: 1
+  threshold_relax_step: 0.05
+  window_widen_factor: 1.5
+
+hardware:
+  device: "cuda"   # "cuda" or "cpu"

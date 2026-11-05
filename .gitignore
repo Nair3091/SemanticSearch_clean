@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# large / generated data - don't commit
+data/raw_videos/*
+data/frame_cache/*
+data/faiss_index/*
+!data/raw_videos/.gitkeep
+!data/frame_cache/.gitkeep
+!data/faiss_index/.gitkeep
+
+*.pt
+*.bin
+*.safetensors
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# test artifacts / caches
+.pytest_cache/
+*.log

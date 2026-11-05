@@ -1,0 +1,22 @@
+# Track 1 — Query Understanding
+torch
+transformers
+
+# Track 2 — Vision & Retrieval
+opencv-python
+ffmpeg-python
+numpy
+faiss-gpu   # swap for faiss-gpu if running on a CUDA box
+git+https://github.com/openai/CLIP.git
+
+# Track 3 — Fusion, Confidence & Web Demo
+scipy
+scikit-learn
+fastapi
+uvicorn
+python-multipart
+
+# Shared
+pyyaml
+pytest
+`

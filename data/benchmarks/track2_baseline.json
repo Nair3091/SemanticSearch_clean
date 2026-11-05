@@ -1,0 +1,270 @@
+[
+  {
+    "video": "sample.mp4",
+    "query": "a dog running",
+    "oracle": {
+      "frames": 32,
+      "peak_time": 5.0,
+      "peak_score": 0.3154411315917969,
+      "total_time": 0.6970021259999157
+    },
+    "coarse": {
+      "frames": 4,
+      "peak_time": 6.0,
+      "peak_score": 0.29662591218948364,
+      "time_error_vs_oracle": 1.0,
+      "total_time": 0.09550008000019261
+    },
+    "two_pass": {
+      "p1_frames": 4,
+      "p2_frames": 32,
+      "total_frames": 36,
+      "windows": [
+        [
+          0.0,
+          8.0
+        ]
+      ],
+      "peak_time": 5.0,
+      "peak_score": 0.3154411315917969,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 0.0,
+      "frame_reduction_pct": -12.5,
+      "t_p1_decode": 0.0672391940001944,
+      "t_p1_embed": 0.02826088599999821,
+      "t_win_select": 5.5594000059500104e-05,
+      "t_p2_decode": 0.5020671089998814,
+      "t_p2_embed": 0.14695233600014035,
+      "total_time": 0.7445751190002738
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.3154411315917969,
+      "top1_idx": 20
+    }
+  },
+  {
+    "video": "sample.mp4",
+    "query": "a person walking",
+    "oracle": {
+      "frames": 32,
+      "peak_time": 2.25,
+      "peak_score": 0.27782344818115234,
+      "total_time": 0.7225583690001258
+    },
+    "coarse": {
+      "frames": 4,
+      "peak_time": 2.0,
+      "peak_score": 0.2700682580471039,
+      "time_error_vs_oracle": 0.25,
+      "total_time": 0.09223148199998832
+    },
+    "two_pass": {
+      "p1_frames": 4,
+      "p2_frames": 25,
+      "total_frames": 29,
+      "windows": [
+        [
+          0.0,
+          6.0
+        ]
+      ],
+      "peak_time": 2.25,
+      "peak_score": 0.27782344818115234,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 0.0,
+      "frame_reduction_pct": 9.375,
+      "t_p1_decode": 0.06976416900010918,
+      "t_p1_embed": 0.02246731299987914,
+      "t_win_select": 4.537600011644827e-05,
+      "t_p2_decode": 0.3607402389998242,
+      "t_p2_embed": 0.11722571199993581,
+      "total_time": 0.5702428089998648
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.27782344818115234,
+      "top1_idx": 9
+    }
+  },
+  {
+    "video": "sample.mp4",
+    "query": "a red sports car",
+    "oracle": {
+      "frames": 32,
+      "peak_time": 3.25,
+      "peak_score": 0.2129063606262207,
+      "total_time": 0.575605780999922
+    },
+    "coarse": {
+      "frames": 4,
+      "peak_time": 6.0,
+      "peak_score": 0.19827936589717865,
+      "time_error_vs_oracle": 2.75,
+      "total_time": 0.08609636799997133
+    },
+    "two_pass": {
+      "p1_frames": 4,
+      "p2_frames": 24,
+      "total_frames": 28,
+      "windows": [
+        [
+          2.0,
+          8.0
+        ]
+      ],
+      "peak_time": 3.25,
+      "peak_score": 0.21290643513202667,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 7.450580596923828e-08,
+      "frame_reduction_pct": 12.5,
+      "t_p1_decode": 0.0635495459998765,
+      "t_p1_embed": 0.022546822000094835,
+      "t_win_select": 2.9345000029934454e-05,
+      "t_p2_decode": 0.3329854209998757,
+      "t_p2_embed": 0.11050913899998704,
+      "total_time": 0.529620272999864
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.2129063606262207,
+      "top1_idx": 13
+    }
+  },
+  {
+    "video": "sample1.mp4",
+    "query": "water or river flowing",
+    "oracle": {
+      "frames": 67,
+      "peak_time": 9.5,
+      "peak_score": 0.2575777769088745,
+      "total_time": 4.244517843999802
+    },
+    "coarse": {
+      "frames": 9,
+      "peak_time": 10.0,
+      "peak_score": 0.25648510456085205,
+      "time_error_vs_oracle": 0.5,
+      "total_time": 0.5689657440000246
+    },
+    "two_pass": {
+      "p1_frames": 9,
+      "p2_frames": 28,
+      "total_frames": 37,
+      "windows": [
+        [
+          8.0,
+          12.0
+        ],
+        [
+          14.0,
+          18.0
+        ]
+      ],
+      "peak_time": 9.5,
+      "peak_score": 0.2575778365135193,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 5.960464477539063e-08,
+      "frame_reduction_pct": 44.776119402985074,
+      "t_p1_decode": 0.515182619000143,
+      "t_p1_embed": 0.05378312499988169,
+      "t_win_select": 4.39730001744465e-05,
+      "t_p2_decode": 2.2095964430000095,
+      "t_p2_embed": 0.16882488999999623,
+      "total_time": 2.9474310500002048
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.2575778067111969,
+      "top1_idx": 38
+    }
+  },
+  {
+    "video": "sample1.mp4",
+    "query": "trees and forest landscape",
+    "oracle": {
+      "frames": 67,
+      "peak_time": 5.25,
+      "peak_score": 0.2665615677833557,
+      "total_time": 4.053630224000017
+    },
+    "coarse": {
+      "frames": 9,
+      "peak_time": 4.0,
+      "peak_score": 0.25117579102516174,
+      "time_error_vs_oracle": 1.25,
+      "total_time": 0.5851604990000396
+    },
+    "two_pass": {
+      "p1_frames": 9,
+      "p2_frames": 25,
+      "total_frames": 34,
+      "windows": [
+        [
+          0.0,
+          6.0
+        ]
+      ],
+      "peak_time": 5.25,
+      "peak_score": 0.2665615677833557,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 0.0,
+      "frame_reduction_pct": 49.25373134328358,
+      "t_p1_decode": 0.5319136499999786,
+      "t_p1_embed": 0.05324684900006105,
+      "t_win_select": 3.420400003051327e-05,
+      "t_p2_decode": 0.8239339379999819,
+      "t_p2_embed": 0.15471243000001778,
+      "total_time": 1.5638410710000699
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.2665615379810333,
+      "top1_idx": 21
+    }
+  },
+  {
+    "video": "sample1.mp4",
+    "query": "a dog playing with a ball",
+    "oracle": {
+      "frames": 67,
+      "peak_time": 5.75,
+      "peak_score": 0.21726331114768982,
+      "total_time": 4.076780377999967
+    },
+    "coarse": {
+      "frames": 9,
+      "peak_time": 0.0,
+      "peak_score": 0.20626133680343628,
+      "time_error_vs_oracle": 5.75,
+      "total_time": 0.6248633079999308
+    },
+    "two_pass": {
+      "p1_frames": 9,
+      "p2_frames": 25,
+      "total_frames": 34,
+      "windows": [
+        [
+          0.0,
+          6.0
+        ]
+      ],
+      "peak_time": 5.75,
+      "peak_score": 0.21726331114768982,
+      "time_error_vs_oracle": 0.0,
+      "score_diff_vs_oracle": 0.0,
+      "frame_reduction_pct": 49.25373134328358,
+      "t_p1_decode": 0.5672575269998106,
+      "t_p1_embed": 0.05760578100012026,
+      "t_win_select": 3.919400000995665e-05,
+      "t_p2_decode": 0.9409433499999977,
+      "t_p2_embed": 0.15487111500010542,
+      "total_time": 1.720716967000044
+    },
+    "faiss": {
+      "matches_direct": true,
+      "top1_score": 0.217263326048851,
+      "top1_idx": 23
+    }
+  }
+]
