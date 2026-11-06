@@ -3,9 +3,9 @@ import numpy as np
 
 from src.common.config import load_config
 from src.common.types import FrameScores, SubQuery
-from src.vision_retrieval.sampling.two_pass_sampler import (
+from src.track2_vision_retrieval.sampling.two_pass_sampler import (
     coarse_sample, dense_resample, select_promising_windows)
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
 
 
 def retrieve(video_path: str, sub_queries: List[SubQuery]) -> FrameScores:

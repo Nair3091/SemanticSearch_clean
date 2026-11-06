@@ -1,5 +1,5 @@
 from src.common.types import SubQuery
-from src.integration.subquery_adapter import structured_to_subqueries
+from src.track1_query_understanding.subquery_adapter import structured_to_subqueries
 
 
 def _texts(sqs):
@@ -42,14 +42,37 @@ def test_entity_negated_by_word_in_query():
     assert _texts(sq) == [("a dog", False), ("a cat", True)]
 
 
-def test_negation_word_before_attributes_and_only_directly_before():
+def test_negation_word_before_attributes_and_ing_verbs():
     s = {"entities": [{"type": "object", "name": "dog", "attributes": []},
                       {"type": "clothing", "name": "hat", "attributes": ["small", "red"]}], "events": []}
     assert _texts(structured_to_subqueries(s, "a dog without a small red hat")[0]) == \
         [("a dog", False), ("a small red hat", True)]
-    # "not" is not directly in front of "hat" here (a verb sits in between) -> stays positive
     assert _texts(structured_to_subqueries(s, "a dog not wearing a small red hat")[0]) == \
+        [("a dog", False), ("a small red hat", True)]
+    # a different noun in between means the negation belongs to that noun, not to the hat
+    assert _texts(structured_to_subqueries(s, "no cat, a dog with a small red hat")[0]) == \
         [("a dog", False), ("a small red hat", False)]
+
+
+def test_real_qwen_output_negation_word_stored_as_attribute():
+    # Qwen3-1.7B on this query: "without" as an attribute of helmet, plus an invented road
+    s = {"entities": [{"type": "person", "name": "person", "attributes": []},
+                      {"type": "vehicle", "name": "bike", "attributes": []},
+                      {"type": "location", "name": "road", "attributes": []},
+                      {"type": "clothing", "name": "helmet", "attributes": ["without"]}],
+         "events": [{"event_id": 1, "action": "riding", "subject": "person", "object": "bike", "negated": False}]}
+    sq, trace = structured_to_subqueries(s, "a person riding a bike without a helmet")
+    assert _texts(sq) == [("a person riding a bike", False), ("a helmet", True)]
+    assert any("road" in line and "dropped" in line for line in trace)
+
+
+def test_real_qwen_output_verb_between_negation_and_entity():
+    s = {"entities": [{"type": "person", "name": "woman", "attributes": []},
+                      {"type": "object", "name": "coffee", "attributes": []},
+                      {"type": "clothing", "name": "glasses", "attributes": []}],
+         "events": [{"event_id": 1, "action": "drinking", "subject": "woman", "object": "coffee", "negated": False}]}
+    sq, _ = structured_to_subqueries(s, "a woman drinking coffee without wearing glasses")
+    assert _texts(sq) == [("a woman drinking a coffee", False), ("a glasses", True)]
 
 
 def test_null_strings_and_missing_object():
@@ -61,9 +84,9 @@ def test_null_strings_and_missing_object():
 
 def test_article_an_and_attribute_order():
     s = {"entities": [{"type": "object", "name": "umbrella", "attributes": ["large", "red"]}], "events": []}
-    assert _texts(structured_to_subqueries(s, "x")[0]) == [("a large red umbrella", False)]
+    assert _texts(structured_to_subqueries(s, "a large red umbrella")[0]) == [("a large red umbrella", False)]
     s = {"entities": [{"type": "object", "name": "apple", "attributes": []}], "events": []}
-    assert _texts(structured_to_subqueries(s, "x")[0]) == [("an apple", False)]
+    assert _texts(structured_to_subqueries(s, "an apple")[0]) == [("an apple", False)]
 
 
 def test_fallback_to_raw_query_when_empty():
@@ -80,7 +103,7 @@ def test_unwraps_full_understand_query_result():
 def test_duplicates_removed_and_cap_keeps_a_positive():
     ents = [{"type": "object", "name": n, "attributes": []} for n in ["a1", "b1", "c1", "d1"]]
     s = {"entities": ents, "events": []}
-    sq, trace = structured_to_subqueries(s, "x", max_sub_queries=2)
+    sq, trace = structured_to_subqueries(s, "a1 b1 c1 d1", max_sub_queries=2)
     assert len(sq) == 2 and "capped" in trace[-1]
     # cap must not leave only negated sub-queries when a positive exists
     s = {"entities": [{"type": "object", "name": "dog", "attributes": []}],

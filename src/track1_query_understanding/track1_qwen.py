@@ -33,6 +33,8 @@ _state = {"model": None, "tokenizer": None, "device": None, "name": None, "last_
 
 def load_model(model_name=DEFAULT_MODEL):
     """Load tokenizer + model once. fp16 on CUDA, fp32 on CPU (same as the notebook)."""
+    if _state["model"] is not None and _state["name"] == model_name:
+        return model_name, _state["device"]
     import os
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     import torch

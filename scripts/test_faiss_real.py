@@ -4,9 +4,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from src.common.config import load_config
-from src.vision_retrieval.sampling.two_pass_sampler import coarse_sample
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
-from src.vision_retrieval.indexing.faiss_index import build_index, load_index, search
+from src.track2_vision_retrieval.sampling.two_pass_sampler import coarse_sample
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.indexing.faiss_index import build_index, load_index, search
 
 VIDEO = "data/raw_videos/eval_spliced.mp4"
 path = load_config()["vision_retrieval"]["faiss_index_path"]

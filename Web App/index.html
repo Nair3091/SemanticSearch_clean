@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SemanticSearch demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --ink: #1c2230; --muted: #5f6b7d; --line: #dfe3ea;
+    --accent: #2457c5; --good: #177245; --good-bg: #e7f5ee; --bad: #b3261e; --bad-bg: #fcebea;
+    --warn: #8a5a00; --warn-bg: #fdf3dc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 18px 24px 4px; max-width: 1180px; margin: auto; }
+  h1 { font-size: 21px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  main { max-width: 1180px; margin: auto; padding: 14px 24px 40px; display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  input[type=text] { width: 100%; padding: 9px 11px; border: 1px solid #b9c0cc; border-radius: 6px; font: inherit; }
+  .choice { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 4px 0; }
+  .choice input { margin-top: 5px; }
+  .choice small { display: block; color: var(--muted); }
+  button { font: inherit; font-weight: 600; border-radius: 6px; padding: 9px 16px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.secondary { background: #fff; color: var(--accent); padding: 5px 11px; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  #drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 280px; border: 2px dashed #b9c0cc; border-radius: 8px; color: var(--muted); text-align: center; padding: 20px; cursor: pointer; }
+  #drop.over { border-color: var(--accent); background: #eef3fd; }
+  video { width: 100%; max-height: 400px; background: #000; border-radius: 6px; display: block; }
+  #fileLine { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 8px; color: var(--muted); overflow-wrap: anywhere; }
+  .notice { padding: 9px 12px; border-radius: 6px; margin-bottom: 12px; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.bad { background: var(--bad-bg); color: var(--bad); }
+  #answer.found { border-color: var(--good); background: var(--good-bg); }
+  #answer.none { border-color: var(--bad); background: var(--bad-bg); }
+  #answer.unverified { border-color: var(--warn); background: var(--warn-bg); }
+  #answerTime { font-size: 27px; font-weight: 700; margin: 0; }
+  #answer p { margin: 3px 0 10px; }
+  .tracks { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .track { border: 1px solid var(--line); border-radius: 6px; padding: 11px 12px; min-width: 0; overflow-wrap: anywhere; }
+  .track h3 { margin: 0; font-size: 14px; }
+  .state { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .state.running { color: var(--accent); font-weight: 600; }
+  .state.done { color: var(--good); }
+  .track ul { margin: 2px 0 8px; padding-left: 18px; }
+  .track b { font-weight: 600; }
+  .neg { color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+  .pill.accepted { background: var(--good-bg); color: var(--good); }
+  .pill.unverified { background: var(--warn-bg); color: var(--warn); }
+  .pill.failed_negation, .pill.below_threshold { background: var(--bad-bg); color: var(--bad); }
+  #chart svg { width: 100%; height: 190px; display: block; cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; }
+  .swatch.band { height: 11px; opacity: .35; }
+  .hidden { display: none !important; }
+  @media (max-width: 860px) { main, .tracks { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SemanticSearch</h1>
+  <p>Find a moment in a video by describing it, including what must not be in it.</p>
+</header>
+<main>
+  <div class="wide hidden notice warn" id="negWarning"></div>
+
+  <section class="panel">
+    <h2>Video</h2>
+    <div id="drop" tabindex="0" role="button">
+      <strong>Drop an MP4 here, or click to choose one</strong>
+      <span>A short clip of 10 to 20 seconds works best</span>
+    </div>
+    <input type="file" id="file" accept="video/*,.mkv" class="hidden">
+    <video id="player" class="hidden" controls muted></video>
+    <div id="fileLine" class="hidden"><span id="fileName"></span><button class="secondary" id="changeFile" type="button">Change video</button></div>
+    <div class="notice warn hidden" id="playerError" style="margin:10px 0 0">This browser cannot play this video's format. The search still works, and you will get the timestamps, but you will not be able to watch the moment here.</div>
+  </section>
+
+  <section class="panel">
+    <h2>Search</h2>
+    <form id="form">
+      <label for="query" style="margin-top:0">What are you looking for?</label>
+      <input type="text" id="query" maxlength="300" placeholder="a dog running without a leash" autocomplete="off">
+      <label>Track 1 query understanding</label>
+      <label class="choice"><input type="radio" name="track1" value="qwen" checked><span>Qwen3 model<small id="qwenNote">Full Track 1. About 2 to 5 minutes per search on a CPU.</small></span></label>
+      <label class="choice"><input type="radio" name="track1" value="rules"><span>Quick rules<small>Instant, for simple queries such as "a dog without a cat".</small></span></label>
+      <div style="margin-top:14px"><button id="go" type="submit" disabled>Find the moment</button></div>
+    </form>
+    <div class="notice bad hidden" id="formError" style="margin:12px 0 0"></div>
+  </section>
+
+  <section class="panel wide hidden" id="answer">
+    <h2 id="answerLabel">Result</h2>
+    <p id="answerTime"></p>
+    <p id="answerDetail"></p>
+    <button class="secondary hidden" id="playBest" type="button">Play this moment</button>
+  </section>
+
+  <section class="panel wide hidden" id="progress">
+    <h2 id="trackHeading">Tracks</h2>
+    <div class="tracks">
+      <div class="track"><h3>Track 1: Query understanding</h3><div class="state" id="t1State">Waiting</div><div id="t1Body"></div></div>
+      <div class="track"><h3>Track 2: Vision retrieval</h3><div class="state" id="t2State">Waiting</div><div id="t2Body"></div></div>
+      <div class="track"><h3>Track 3: Fusion and negation</h3><div class="state" id="t3State">Waiting</div><div id="t3Body"></div></div>
+    </div>
+  </section>
+
+  <section class="panel wide hidden" id="chart">
+    <h2>Match score over time (click to jump to that moment)</h2>
+    <div id="chartBody"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="panel wide hidden" id="candidates">
+    <h2>All candidate moments</h2>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Moment</th><th>Decision</th><th class="num">Match</th><th class="num">Absence</th><th class="num">Frames passing</th><th class="num">Final</th><th></th></tr></thead>
+      <tbody id="candidateRows"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+const SERIES_COLORS = ["#2457c5", "#b3541e", "#6b3fa0", "#0f7c7c", "#8a5a00"];
+const STATUS_TEXT = { accepted: "Accepted", unverified: "Negation not checked", below_threshold: "Below threshold", failed_negation: "Failed negation" };
+const BAND_COLORS = { accepted: "#177245", unverified: "#8a5a00", below_threshold: "#9aa3b2", failed_negation: "#b3261e" };
+
+let videoFile = null, stopAt = null, pollTimer = null, startedAt = 0;
+
+const clock = t => {
+  const s = Math.max(0, t), m = Math.floor(s / 60), r = s - m * 60;
+  return `${m}:${r.toFixed(2).padStart(5, "0")}`;
+};
+const el = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
+const show = (id, on = true) => $(id).classList.toggle("hidden", !on);
+
+function setFile(file) {
+  if (!file) return;
+  videoFile = file;
+  const player = $("player");
+  if (player.src) URL.revokeObjectURL(player.src);
+  show("playerError", false);
+  player.src = URL.createObjectURL(file);
+  $("fileName").textContent = file.name;
+  show("drop", false); show("player"); show("fileLine");
+  clearResults();
+  updateGo();
+}
+
+function updateGo() { $("go").disabled = !videoFile || !$("query").value.trim() || pollTimer !== null; }
+
+function clearResults() {
+  ["answer", "progress", "chart", "candidates", "formError"].forEach(id => show(id, false));
+}
+
+function playMoment(start, end) {
+  const player = $("player");
+  player.currentTime = start;
+  stopAt = end;
+  player.play();
+  player.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+$("player").addEventListener("error", () => show("playerError"));
+$("player").addEventListener("timeupdate", () => {
+  if (stopAt !== null && $("player").currentTime >= stopAt) { $("player").pause(); stopAt = null; }
+});
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+$("changeFile").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", e => setFile(e.target.files[0]));
+["dragover", "dragenter"].forEach(n => $("drop").addEventListener(n, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach(n => $("drop").addEventListener(n, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => setFile(e.dataTransfer.files[0]));
+$("query").addEventListener("input", updateGo);
+
+function setState(id, text, cls = "") { const n = $(id); n.textContent = text; n.className = "state " + cls; }
+
+function renderProgress(job) {
+  const elapsed = (Date.now() - startedAt) / 1000;
+  [["track1", "t1State"], ["track2", "t2State"], ["track3", "t3State"]].forEach(([key, id]) => {
+    const info = job.tracks[key];
+    if (!info) setState(id, "Waiting");
+    else if (info.state === "running") setState(id, "Running", "running");
+    else setState(id, `Done in ${info.seconds.toFixed(1)}s`, "done");
+  });
+  $("trackHeading").textContent = job.state === "running" ? `Tracks (${Math.round(elapsed)}s so far)` : "Tracks";
+}
+
+function list(parent, title, items, cls) {
+  parent.append(el("b", title, cls));
+  const ul = el("ul");
+  items.forEach(t => ul.append(el("li", t, cls)));
+  parent.append(ul);
+}
+
+function renderTracks(job, r) {
+  const t1 = $("t1Body"); t1.replaceChildren();
+  list(t1, "Must appear (sent to CLIP)", r.parsed.positive_sub_queries);
+  if (r.parsed.negated_sub_queries.length) list(t1, "Must NOT appear", r.parsed.negated_sub_queries, "neg");
+  t1.append(el("div", job.track1_mode === "qwen" && r.parsed.source !== "rule_based" ? "Parsed by Qwen3" : "Parsed by rules"));
+  r.parsed.warnings.forEach(w => t1.append(el("div", w, "neg")));
+
+  const t2 = $("t2Body"); t2.replaceChildren();
+  t2.append(el("div", `${r.timeline.timestamps.length} frames scored by CLIP`));
+  t2.append(el("div", "Looked closer at: " + r.timeline.windows.map(([a, b]) => `${clock(a)} to ${clock(b)}`).join(", ")));
+
+  const t3 = $("t3Body"); t3.replaceChildren();
+  t3.append(el("div", `${r.candidates.length} candidate moments, threshold ${r.threshold}`));
+  if (!r.parsed.negated_sub_queries.length) t3.append(el("div", "No negation in this query."));
+  else if (r.negation_checked) t3.append(el("div", "ConCLIP checked that this is absent: " + r.parsed.negated_sub_queries.join("; ")));
+  else t3.append(el("div", "ConCLIP did not run, so the negation was NOT checked.", "neg"));
+}
+
+function renderAnswer(r) {
+  const box = $("answer"); show("answer");
+  const best = r.best;
+  const unverified = r.accepted && best.status === "unverified";
+  box.className = "panel wide " + (unverified ? "unverified" : r.accepted ? "found" : "none");
+  if (r.accepted) {
+    $("answerLabel").textContent = unverified ? "Found, but the negation was not checked" : "Found";
+    $("answerTime").textContent = `${clock(best.start)} to ${clock(best.end)}`;
+    $("answerDetail").textContent = `${r.message}. Final score ${best.final_score.toFixed(3)}.`;
+  } else {
+    $("answerLabel").textContent = "Not found";
+    $("answerTime").textContent = "No confident match";
+    const hint = best ? ` The closest moment was ${clock(best.start)} to ${clock(best.end)}.` : "";
+    $("answerDetail").textContent = r.message + "." + hint;
+  }
+  show("playBest", !!best);
+  $("playBest").textContent = r.accepted ? "Play this moment" : "Play the closest moment";
+  $("playBest").onclick = () => playMoment(best.start, best.end);
+}
+
+function svgEl(name, attrs) { const n = document.createElementNS(SVG, name); Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
+
+function renderChart(r) {
+  show("chart");
+  const W = 1000, H = 190, L = 44, R = 10, T = 8, B = 26, tl = r.timeline;
+  const dur = Math.max(r.duration, 0.001);
+  const all = [...tl.fused, ...tl.series.flatMap(s => s.scores), r.threshold];
+  let lo = Math.min(...all), hi = Math.max(...all);
+  const pad = Math.max((hi - lo) * 0.08, 0.005); lo -= pad; hi += pad;
+  const x = t => L + (t / dur) * (W - L - R), y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img", "aria-label": "Match score over time" });
+
+  r.candidates.forEach(c => svg.append(svgEl("rect", { x: x(c.start), y: T, width: Math.max(x(c.end) - x(c.start), 2), height: H - T - B, fill: BAND_COLORS[c.status], opacity: .22 })));
+  svg.append(svgEl("line", { x1: L, x2: W - R, y1: y(r.threshold), y2: y(r.threshold), stroke: "#5f6b7d", "stroke-dasharray": "5 4", "vector-effect": "non-scaling-stroke" }));
+
+  const path = (values, color, width) => svg.append(svgEl("polyline", { points: tl.timestamps.map((t, i) => `${x(t).toFixed(1)},${y(values[i]).toFixed(1)}`).join(" "), fill: "none", stroke: color, "stroke-width": width, "vector-effect": "non-scaling-stroke" }));
+  if (tl.series.length > 1) tl.series.forEach((s, i) => path(s.scores, SERIES_COLORS[i % SERIES_COLORS.length], 1.2));
+  path(tl.fused, "#1c2230", 2.2);
+
+  const text = (t, xx, yy, anchor = "middle") => { const n = svgEl("text", { x: xx, y: yy, "text-anchor": anchor, "font-size": 13, fill: "#5f6b7d" }); n.textContent = t; svg.append(n); };
+  const step = dur <= 30 ? 5 : dur <= 120 ? 15 : 60;
+  for (let t = 0; t <= dur; t += step) text(`${Math.round(t)}s`, x(t), H - 8);
+  text(hi.toFixed(2), L - 6, T + 12, "end"); text(lo.toFixed(2), L - 6, H - B, "end");
+
+  svg.addEventListener("click", e => {
+    const box = svg.getBoundingClientRect();
+    const t = ((e.clientX - box.left) / box.width * W - L) / (W - L - R) * dur;
+    stopAt = null; $("player").currentTime = Math.min(Math.max(t, 0), dur);
+  });
+  $("chartBody").replaceChildren(svg);
+
+  const legend = $("legend"); legend.replaceChildren();
+  const key = (label, color, band) => { const s = el("span"); const sw = el("span", null, "swatch" + (band ? " band" : "")); sw.style.background = color; s.append(sw, document.createTextNode(label)); legend.append(s); };
+  key(tl.series.length > 1 ? "Combined score (weakest part)" : "Match score", "#1c2230");
+  if (tl.series.length > 1) tl.series.forEach((s, i) => key(s.label, SERIES_COLORS[i % SERIES_COLORS.length]));
+  key(`Threshold ${r.threshold}`, "#5f6b7d");
+  [...new Set(r.candidates.map(c => c.status))].forEach(st => key(STATUS_TEXT[st], BAND_COLORS[st], true));
+}
+
+function renderCandidates(r) {
+  show("candidates", r.candidates.length > 0);
+  const rows = $("candidateRows"); rows.replaceChildren();
+  r.candidates.forEach(c => {
+    const tr = el("tr");
+    tr.append(el("td", `${clock(c.start)} to ${clock(c.end)}`));
+    const status = el("td"); status.append(el("span", STATUS_TEXT[c.status], "pill " + c.status)); tr.append(status);
+    tr.append(el("td", c.retrieval_confidence.toFixed(3), "num"));
+    tr.append(el("td", c.negation_score == null ? "n/a" : c.negation_score.toFixed(3), "num"));
+    tr.append(el("td", c.pass_ratio == null ? "n/a" : `${Math.round(c.pass_ratio * c.frames_checked)} of ${c.frames_checked}`, "num"));
+    tr.append(el("td", c.final_score.toFixed(3), "num"));
+    const act = el("td"); const b = el("button", "Play", "secondary"); b.type = "button"; b.onclick = () => playMoment(c.start, c.end); act.append(b); tr.append(act);
+    rows.append(tr);
+  });
+}
+
+function stopPolling() {
+  clearInterval(pollTimer); pollTimer = null;
+  $("go").textContent = "Find the moment";
+  updateGo();
+}
+
+function fail(message) {
+  $("formError").textContent = message; show("formError");
+  stopPolling();
+}
+
+async function poll(jobId) {
+  let job;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`);
+    if (!res.ok) throw new Error((await res.json()).detail);
+    job = await res.json();
+  } catch (e) { return fail(`Lost contact with the server: ${e.message}`); }
+  renderProgress(job);
+  if (job.state === "error") return fail(`The search failed. ${job.error}`);
+  if (job.state === "done") {
+    stopPolling();
+    renderProgress(job);
+    renderTracks(job, job.result);
+    renderAnswer(job.result);
+    renderChart(job.result);
+    renderCandidates(job.result);
+  }
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if ($("go").disabled) return;
+  clearResults();
+  ["t1Body", "t2Body", "t3Body"].forEach(id => $(id).replaceChildren());
+  ["t1State", "t2State", "t3State"].forEach(id => setState(id, "Waiting"));
+  const data = new FormData();
+  data.append("video", videoFile);
+  data.append("query", $("query").value.trim());
+  data.append("track1", document.querySelector("input[name=track1]:checked").value);
+  $("go").disabled = true; $("go").textContent = "Uploading";
+  try {
+    const res = await fetch("/api/search", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || "Upload failed.");
+    startedAt = Date.now();
+    show("progress");
+    $("go").textContent = "Searching";
+    pollTimer = setInterval(() => poll(body.job_id), 1000);
+    poll(body.job_id);
+  } catch (err) {
+    $("formError").textContent = err.message; show("formError");
+    $("go").textContent = "Find the moment"; updateGo();
+  }
+});
+
+fetch("/api/status").then(r => r.json()).then(s => {
+  $("qwenNote").textContent = `Full Track 1 (${s.qwen_model}). About 2 to 5 minutes per search on a CPU.`;
+  if (!s.negation_ready) {
+    $("negWarning").textContent = `Track 3 negation check is not available: ${s.negation_reason}. Queries with negation will be marked as not checked.`;
+    show("negWarning");
+  }
+});
+</script>
+</body>
+</html>

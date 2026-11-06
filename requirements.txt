@@ -15,8 +15,9 @@ scikit-learn
 fastapi
 uvicorn
 python-multipart
+open_clip_torch
+pillow
 
 # Shared
 pyyaml
 pytest
-`

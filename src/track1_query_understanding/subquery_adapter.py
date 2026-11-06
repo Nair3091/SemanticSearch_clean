@@ -15,6 +15,9 @@ Rules (deliberately simple and printed back as a trace so they can be inspected)
   2b. If a NON-negated event mentions an entity that the query negates this way, Track 1
      missed the negation word (Qwen3-1.7B turned "a dog without a cat" into "dog has cat").
      That event is dropped and its entities fall through to rule 2.
+  2c. Qwen sometimes stores the negation word as an attribute ("without" on "helmet") or invents
+     an entity the query never mentions ("a road"). The word is removed from the attributes and
+     the entity counts as negated; an invented entity that no event uses is dropped.
   3. If nothing could be extracted, fall back to the raw query as one positive sub-query.
   4. At most `max_sub_queries` are kept (config: query_understanding.max_sub_queries),
      always keeping at least one positive.
@@ -38,26 +41,28 @@ def _clean(value):
 
 
 def _noun_phrase(name: str, attributes) -> str:
-    attrs = [str(a).strip() for a in (attributes or []) if str(a).strip()]
+    attrs = [str(a).strip() for a in (attributes or [])
+             if str(a).strip() and str(a).strip().lower() not in NEGATION_WORDS]
     words = " ".join(attrs + [name])
     article = "an" if words[:1].lower() in "aeiou" else "a"
     return f"{article} {words}"
 
 
 def _negated_in_query(query: str, name: str, attributes) -> bool:
-    """True if the entity is directly preceded by a negation word in the query, allowing only
-    articles and the entity's own attributes in between ("without a small red hat")."""
+    """True if a negation word governs the entity in the query. Only articles, the entity's own
+    attributes and -ing verbs may sit in between ("without a small red hat", "not wearing a hat")."""
     words = re.findall(r"[a-z0-9']+", query.lower())
     target = name.lower().split()
     allowed = set(_FILLER)
     for a in attributes or []:
         allowed.update(str(a).lower().split())
+    allowed -= NEGATION_WORDS
     n = len(target)
     for i in range(len(words) - n + 1):
         if words[i:i + n] != target:
             continue
         j = i - 1
-        while j >= 0 and words[j] in allowed:
+        while j >= 0 and (words[j] in allowed or words[j].endswith("ing")):
             j -= 1
         if j >= 0 and words[j] in NEGATION_WORDS:
             return True
@@ -133,6 +138,9 @@ def structured_to_subqueries(structured, original_query: str,
             continue
         name = str(ent["name"]).strip()
         attrs = ent.get("attributes") or []
+        if name_l not in original_query.lower():
+            trace.append(f"entity '{name}' dropped: not in the query")
+            continue
         negated = name_l in query_negated
         why = (f"entity '{name}' (not in any event, negation word in query)" if negated
                else f"entity '{name}' (not in any event)")

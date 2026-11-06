@@ -1,5 +1,5 @@
 import numpy as np
-from src.vision_retrieval.embedding.clip_encoder import score_frames
+from src.track2_vision_retrieval.embedding.clip_encoder import score_frames
 
 
 def _norm(x):

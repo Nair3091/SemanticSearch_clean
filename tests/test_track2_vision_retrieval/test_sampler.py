@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from src.common.types import Frame
-from src.vision_retrieval.sampling.two_pass_sampler import (
+from src.track2_vision_retrieval.sampling.two_pass_sampler import (
     coarse_sample, dense_resample, select_promising_windows)
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from src.vision_retrieval.indexing.faiss_index import build_index, load_index, search
+from src.track2_vision_retrieval.indexing.faiss_index import build_index, load_index, search
 
 
 def test_round_trip(tmp_path):

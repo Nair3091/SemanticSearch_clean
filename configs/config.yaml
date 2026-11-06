@@ -2,7 +2,7 @@
 # Anyone changing a default should update this file so the whole team stays in sync.
 
 query_understanding:
-  qwen3_model_name: "Qwen/Qwen3-8B"   # placeholder, confirm exact checkpoint
+  qwen3_model_name: "Qwen/Qwen3-1.7B"
   max_sub_queries: 5
 
 vision_retrieval:
@@ -15,7 +15,21 @@ vision_retrieval:
 
 fusion_confidence:
   aggregation: "min"
-  confidence_threshold: 0.28   # calibrate against NegBench/QVHighlights dev set
+  # ViT-L/14 raw cosine. Set from one test video: present 0.21-0.25, absent 0.10-0.16.
+  # Still to calibrate against the NegBench/QVHighlights dev set.
+  confidence_threshold: 0.185
+  segment_score_drop: 0.02     # segment = frames around a peak within this much of it; not calibrated
+  negation:
+    conclip_weights_path: "data/conclip/conclip_b32_openclip_version.pt"   # gitignored, from NegBench
+    conclip_model_name: "ViT-B-32"
+    # A frame passes if its similarity to the excluded concept is below this. From one test video:
+    # absent up to 0.195, visible from 0.215. Still to calibrate on a proper dev set.
+    frame_threshold: 0.205
+    min_pass_ratio: 0.7
+    sample_interval_seconds: 1.0
+    max_frames_per_segment: 16
+    batch_size: 16
+    fusion_weight: 0.5         # placeholder, weight of the ConCLIP score in the final ranking
 
 recovery:
   max_retries: 1

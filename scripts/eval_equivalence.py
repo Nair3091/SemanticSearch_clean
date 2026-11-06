@@ -15,9 +15,9 @@ import cv2
 import numpy as np
 from src.common.config import load_config
 from src.common.types import SubQuery
-from src.vision_retrieval.sampling.two_pass_sampler import dense_resample
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
-from src.vision_retrieval.retriever import retrieve
+from src.track2_vision_retrieval.sampling.two_pass_sampler import dense_resample
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.retriever import retrieve
 
 TOL = 1e-6
 

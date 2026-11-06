@@ -25,13 +25,13 @@ import cv2
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.vision_retrieval.sampling.two_pass_sampler import (
+from src.track2_vision_retrieval.sampling.two_pass_sampler import (
     coarse_sample, dense_resample, select_promising_windows
 )
-from src.vision_retrieval.embedding.clip_encoder import (
+from src.track2_vision_retrieval.embedding.clip_encoder import (
     embed_frames, embed_text, score_frames
 )
-from src.vision_retrieval.indexing.faiss_index import (
+from src.track2_vision_retrieval.indexing.faiss_index import (
     build_index, load_index, search
 )
 

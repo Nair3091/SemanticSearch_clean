@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-from src.vision_retrieval.sampling.two_pass_sampler import coarse_sample
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.sampling.two_pass_sampler import coarse_sample
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
 
 _COCO = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
          "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",

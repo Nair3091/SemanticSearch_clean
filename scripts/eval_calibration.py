@@ -4,8 +4,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from sklearn.metrics import roc_auc_score
-from src.vision_retrieval.sampling.two_pass_sampler import coarse_sample
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.sampling.two_pass_sampler import coarse_sample
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
 
 BACKGROUND = ["a photo", "an image", "a video frame", "a picture", "a scene"]
 _COCO = ["person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"]

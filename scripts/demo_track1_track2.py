@@ -21,8 +21,8 @@ import numpy as np
 
 from src.common.config import load_config
 from src.common.types import SubQuery
-from src.integration.subquery_adapter import structured_to_subqueries
-from src.vision_retrieval.retriever import retrieve
+from src.track1_query_understanding.subquery_adapter import structured_to_subqueries
+from src.track2_vision_retrieval.retriever import retrieve
 
 BLOCKS = "▁▂▃▄▅▆▇█"
 LABEL_W = 30
@@ -267,13 +267,13 @@ def main():
     manual = bool(args.pos or args.neg)
     t1 = None
     if not manual:
-        from src.integration import track1_qwen as t1
+        from src.track1_query_understanding import track1_qwen as t1
         name = args.model or t1.DEFAULT_MODEL
         print(f"Loading Qwen ({name}) once ...")
         name, device = t1.load_model(name)
         print(f"  ready on {device}")
     print("Loading CLIP once ...")
-    from src.vision_retrieval.embedding.clip_encoder import embed_text
+    from src.track2_vision_retrieval.embedding.clip_encoder import embed_text
     embed_text(["warm up"])
     print("  ready")
 

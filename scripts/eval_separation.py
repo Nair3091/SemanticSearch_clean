@@ -5,8 +5,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 from sklearn.metrics import roc_auc_score
 from src.common.config import load_config
-from src.vision_retrieval.sampling.two_pass_sampler import coarse_sample
-from src.vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+from src.track2_vision_retrieval.sampling.two_pass_sampler import coarse_sample
+from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
 
 
 def main():

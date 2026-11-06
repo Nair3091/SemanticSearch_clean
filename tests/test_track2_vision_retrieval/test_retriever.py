@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from src.common.types import SubQuery
-from src.vision_retrieval import retriever
+from src.track2_vision_retrieval import retriever
 
 
 @pytest.fixture
