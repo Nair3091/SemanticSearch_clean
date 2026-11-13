@@ -14,6 +14,8 @@ test video and laptop CPU:
 | Repeated queries skip Qwen (`decomposer.py`) | 1 | Instant |
 | Models preload at app start (`Web App/app.py`) | All | 71s for Qwen at startup instead of during the first search |
 | Softmax confidence for accept/reject (`scoring/softmax_confidence.py`) | 2 and 3 | 18 of 19 searches correct at 0.25; real matches ≥ 0.208, absent ≤ 0.056 |
+| Track 2 processes frames while Qwen parses (`run_pipeline.run`) | 1 and 2 | New query on a new video: 101s → 78s |
+| Web App processes the video on upload, while the query is typed (`retriever.prepare_video`) | 2 | New query: 101s → 47s; Quick rules 0.6s |
 
 Raw cosine still locates moments; softmax only decides accept or reject. The sections below are the
 original plan; Phase 2 and Phase 3 are still to do.

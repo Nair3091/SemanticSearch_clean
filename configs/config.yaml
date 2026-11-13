@@ -13,6 +13,9 @@ vision_retrieval:
   faiss_index_path: "data/faiss_index/index.faiss"
   window_radius_seconds: 3.0
   softmax_logit_scale: 100.0   # CLIP's own temperature; used for the softmax confidence
+  # Videos up to this long get every Pass-2 frame embedded up front (on upload, or while Qwen runs),
+  # so later queries only score frames. Longer videos get Pass 1 up front and Pass 2 per query.
+  preindex_full_max_seconds: 60
 
 fusion_confidence:
   aggregation: "min"

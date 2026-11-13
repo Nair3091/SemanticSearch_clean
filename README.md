@@ -145,8 +145,9 @@ python "Web App/app.py"
 This opens the demo at http://127.0.0.1:8000. On Windows you can also double-click
 `Web App/start_demo.bat`.
 
-The models load in the background when the app starts (about 1 to 2 minutes), so the first search
-doesn't pay for it. Add `--no-qwen-preload` to skip loading Qwen (saves about 9 GB of RAM if you only
+The models load in the background when the app starts (about 1 to 4 minutes on a CPU), so the first
+search doesn't pay for it. As soon as you choose a video, it uploads and Track 2 starts processing its
+frames while you type the query; a search started before that finishes simply continues it. Add `--no-qwen-preload` to skip loading Qwen (saves about 9 GB of RAM if you only
 use Quick rules), or `--no-preload` to load everything on the first search instead.
 
 1. Drop in a short video.
@@ -185,12 +186,15 @@ Tested on one 20-second video of four known scenes, on a CPU:
 | Full searches (objects, phrases, general words, absent things, negation) | 18 of 19 correct at threshold 0.25; the 0.15 now used separates all 19 |
 | Negation check on concepts not used to choose its cutoff | 23 of 24 |
 
-| Speed | Before | Now |
-|---|---|---|
-| Track 2, first search on a video | ~38s | ~32s |
-| Track 2, later searches on the same video | ~38s | 0.3–0.6s |
-| Track 1 (Qwen), new query | 120–134s | 91–93s, identical output |
-| Track 1 (Qwen), repeated query | 120–134s | instant |
+| Speed, 20-second video, new query | Time |
+|---|---|
+| Qwen, one step after the other (the old order) | 101s |
+| Qwen, frames processed while Qwen runs | 78s |
+| Qwen, video processed on upload while you type | 47s |
+| Quick rules, video processed on upload | 0.6s |
+| Any repeated query, or another query on the same video with Quick rules | under 1s |
+
+Processing a 20-second video on upload takes about 47s (80 frames) and happens once per video.
 
 These numbers come from one small video made from still photos, so they are not an accuracy measurement.
 

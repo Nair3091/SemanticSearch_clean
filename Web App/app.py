@@ -11,10 +11,15 @@ Models load in the background at startup, so the first search does not pay for i
 
 All pipeline logic lives in scripts/run_pipeline.py. This file only handles uploads, runs one
 search at a time in the background, and reports progress to the page.
+
+A video starts being prepared (Track 2 embeds its frames) as soon as it is uploaded, while you
+type the query, and keeps going while Qwen parses it. Searches then only score frames.
 """
 
+import atexit
 import sys
 import tempfile
+import time
 import threading
 import uuid
 import webbrowser
@@ -36,12 +41,16 @@ HOST, PORT = "127.0.0.1", 8000
 PAGE = Path(__file__).resolve().parent / "index.html"
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 MAX_QUERY_CHARS = 300
+MAX_KEPT_VIDEOS = 3                           # older uploads are deleted
 
 app = FastAPI(title="SemanticSearch demo")
 _jobs = {}
 _jobs_lock = threading.Lock()
 _worker = ThreadPoolExecutor(max_workers=1)   # the models are shared, so searches run one at a time
 _models = {"state": "not loaded"}             # "loading", "ready", or "failed: ..."
+_preparer = ThreadPoolExecutor(max_workers=1) # embeds uploaded videos' frames, alongside searches
+_videos = {}                                  # video_id -> path, duration, preparation state
+_videos_lock = threading.Lock()
 
 
 def warm_up(include_qwen: bool = True):
@@ -112,12 +121,38 @@ def _run_job(job_id: str, video_path: str, query: str, use_qwen: bool, duration:
 
     try:
         ready, _ = run_pipeline.negation_status(load_config())
-        report = run_pipeline.run(video_path, query, use_qwen=use_qwen, check_negation=ready, progress=progress)
+        # the upload already started preparing this video on _preparer, in parallel with this search
+        report = run_pipeline.run(video_path, query, use_qwen=use_qwen, check_negation=ready,
+                                  progress=progress, prepare_in_parallel=False)
         _update(job_id, state="done", result=report_to_dict(report, duration))
     except Exception as exc:   # shown on the page instead of leaving it waiting forever
         _update(job_id, state="error", error=f"{type(exc).__name__}: {exc}")
-    finally:
-        Path(video_path).unlink(missing_ok=True)
+
+
+def _prepare(video_id: str, path: str):
+    with _videos_lock:
+        if video_id not in _videos:
+            return
+        _videos[video_id]["state"] = "preparing"
+    t0 = time.time()
+    try:
+        info = run_pipeline.prepare_video(path)
+        fields = {"state": "ready", "frames": info["frames"], "seconds": time.time() - t0}
+    except Exception as exc:   # a search will embed what it needs itself
+        fields = {"state": "failed", "error": f"{type(exc).__name__}: {exc}", "seconds": time.time() - t0}
+    with _videos_lock:
+        if video_id in _videos:
+            _videos[video_id].update(fields)
+
+
+def _delete_all_videos():
+    with _videos_lock:
+        for v in _videos.values():
+            Path(v["path"]).unlink(missing_ok=True)
+        _videos.clear()
+
+
+atexit.register(_delete_all_videos)
 
 
 @app.get("/")
@@ -134,14 +169,8 @@ def status():
             "clip_model": cfg["vision_retrieval"]["clip_model_name"]}
 
 
-@app.post("/api/search")
-async def search(video: UploadFile = File(...), query: str = Form(...), track1: str = Form("qwen")):
-    query = query.strip()
-    if not query or len(query) > MAX_QUERY_CHARS:
-        raise HTTPException(400, f"Enter a query of 1 to {MAX_QUERY_CHARS} characters.")
-    if track1 not in ("qwen", "rules"):
-        raise HTTPException(400, "Unknown Track 1 mode.")
-
+@app.post("/api/videos")
+async def upload_video(video: UploadFile = File(...)):
     suffix = Path(video.filename or "").suffix.lower()
     if suffix not in (".mp4", ".mov", ".avi", ".mkv", ".webm"):
         raise HTTPException(400, "Please upload a video file such as an MP4.")
@@ -159,6 +188,39 @@ async def search(video: UploadFile = File(...), query: str = Form(...), track1: 
     if duration is None:
         Path(path).unlink(missing_ok=True)
         raise HTTPException(400, "This file could not be read as a video.")
+
+    video_id = uuid.uuid4().hex
+    with _videos_lock:
+        _videos[video_id] = {"path": path, "duration": duration, "state": "queued", "frames": 0,
+                             "seconds": None, "error": None}
+        while len(_videos) > MAX_KEPT_VIDEOS:
+            oldest = next(iter(_videos))
+            Path(_videos.pop(oldest)["path"]).unlink(missing_ok=True)
+    _preparer.submit(_prepare, video_id, path)
+    return {"video_id": video_id, "duration": duration}
+
+
+@app.get("/api/videos/{video_id}")
+def video_status(video_id: str):
+    with _videos_lock:
+        found = _videos.get(video_id)
+        if found is None:
+            raise HTTPException(404, "Unknown video. Please choose it again.")
+        return {k: v for k, v in found.items() if k != "path"}
+
+
+@app.post("/api/search")
+def search(video_id: str = Form(...), query: str = Form(...), track1: str = Form("qwen")):
+    query = query.strip()
+    if not query or len(query) > MAX_QUERY_CHARS:
+        raise HTTPException(400, f"Enter a query of 1 to {MAX_QUERY_CHARS} characters.")
+    if track1 not in ("qwen", "rules"):
+        raise HTTPException(400, "Unknown Track 1 mode.")
+    with _videos_lock:
+        found = _videos.get(video_id)
+        if found is None:
+            raise HTTPException(404, "Unknown video. Please choose it again.")
+        path, duration = found["path"], found["duration"]
 
     job_id = uuid.uuid4().hex
     with _jobs_lock:

@@ -18,7 +18,8 @@ from src.track2_vision_retrieval.scoring import softmax_confidence
 CFG = {
     "vision_retrieval": {"clip_model_name": "fake", "softmax_logit_scale": 100.0,
                          "pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
-                         "top_k_windows": 2, "window_radius_seconds": 1.0},
+                         "top_k_windows": 2, "window_radius_seconds": 1.0,
+                         "preindex_full_max_seconds": 60},
     # raw scores: the stand-in CLIP below cannot produce a meaningful softmax confidence
     "fusion_confidence": {"aggregation": "min", "confidence_score": "raw", "confidence_threshold": 0.5,
                           "segment_score_drop": 0.02, "negation": {"fusion_weight": 0.5}},
@@ -218,3 +219,34 @@ def test_repeated_qwen_query_is_parsed_once(monkeypatch):
     first = rp.parse_query("a dog")
     second = rp.parse_query("A dog ")
     assert calls == ["a dog"] and [s.text for s in first.positive] == [s.text for s in second.positive]
+
+
+def test_qwen_search_prepares_frames_while_parsing(video, monkeypatch):
+    order = []
+    monkeypatch.setattr(rp, "prepare_video", lambda path: order.append("prepare") or {})
+    monkeypatch.setattr(rp, "parse_query", lambda q, use_qwen: order.append("parse") or parsed())
+    monkeypatch.setattr(rp, "retrieve", lambda path, subs: order.append("retrieve") or two_moments())
+    monkeypatch.setattr(rp, "load_config", lambda: {**CFG, "hardware": {"device": "cpu"}})
+    report = rp.run(video, "a dog", use_qwen=True)
+    assert set(order[:2]) == {"prepare", "parse"} and order[2] == "retrieve"
+    assert "track2_prepare_overlapped" in report.timings
+
+
+def test_preparation_failure_does_not_stop_the_search(video, monkeypatch):
+    def boom(path):
+        raise RuntimeError("decode error")
+
+    monkeypatch.setattr(rp, "prepare_video", boom)
+    monkeypatch.setattr(rp, "parse_query", lambda q, use_qwen: parsed())
+    monkeypatch.setattr(rp, "retrieve", lambda path, subs: two_moments())
+    monkeypatch.setattr(rp, "load_config", lambda: {**CFG, "hardware": {"device": "cpu"}})
+    assert rp.run(video, "a dog", use_qwen=True).result.accepted
+
+
+def test_rules_and_no_overlap_skip_the_parallel_preparation(video, monkeypatch):
+    monkeypatch.setattr(rp, "prepare_video", lambda path: pytest.fail("should not prepare in parallel"))
+    monkeypatch.setattr(rp, "parse_query", lambda q, use_qwen: parsed())
+    monkeypatch.setattr(rp, "retrieve", lambda path, subs: two_moments())
+    monkeypatch.setattr(rp, "load_config", lambda: {**CFG, "hardware": {"device": "cpu"}})
+    rp.run(video, "a dog", use_qwen=False)
+    rp.run(video, "a dog", use_qwen=True, prepare_in_parallel=False)

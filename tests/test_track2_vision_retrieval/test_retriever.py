@@ -31,7 +31,8 @@ def fake_clip(monkeypatch):
 
     cfg = {"vision_retrieval": {"clip_model_name": "fake", "softmax_logit_scale": 100.0,
                                 "pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
-                                "top_k_windows": 1, "window_radius_seconds": 1.0}}
+                                "top_k_windows": 1, "window_radius_seconds": 1.0,
+                                "preindex_full_max_seconds": 60}}
     monkeypatch.setattr(retriever, "embed_frames", fake_embed_frames)
     monkeypatch.setattr(retriever, "embed_text", fake_embed_text)
     monkeypatch.setattr(retriever, "load_config", lambda: cfg)
@@ -84,3 +85,20 @@ def test_confidence_is_returned_per_sub_query(video):
     r = retriever.retrieve(video, [SubQuery("a", False), SubQuery("b", True)])
     assert len(r.confidence) == 2 and r.confidence[0].shape == r.scores[0].shape
     assert all(((c >= 0) & (c <= 1)).all() for c in r.confidence)
+
+
+def test_prepare_video_embeds_every_frame_a_short_video_could_need(video, monkeypatch):
+    calls = []
+    real = retriever.embed_frames
+    monkeypatch.setattr(retriever, "embed_frames", lambda frames: calls.append(len(frames)) or real(frames))
+    info = retriever.prepare_video(video)
+    assert info["full_grid"] and info["frames"] == 40         # 10s on the 0.25s grid
+    retriever.retrieve(video, [SubQuery("bright", False)])
+    assert calls == [40]                                       # the search embedded nothing new
+
+
+def test_long_video_prepares_only_pass_1(video, monkeypatch):
+    cfg = {"vision_retrieval": {**retriever.load_config()["vision_retrieval"], "preindex_full_max_seconds": 5}}
+    monkeypatch.setattr(retriever, "load_config", lambda: cfg)
+    info = retriever.prepare_video(video)
+    assert not info["full_grid"] and info["frames"] == 5      # 0, 2, 4, 6, 8

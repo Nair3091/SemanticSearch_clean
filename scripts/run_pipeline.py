@@ -19,6 +19,7 @@ import argparse
 import importlib.util
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, List, Optional
@@ -31,7 +32,7 @@ import numpy as np
 from src.common.config import load_config
 from src.common.types import CandidateSegment, RetrievalResult
 from src.track1_query_understanding.decomposer import decompose_query
-from src.track2_vision_retrieval.retriever import retrieve
+from src.track2_vision_retrieval.retriever import prepare_video, retrieve
 from src.track3_fusion_confidence.clip_exporter import export_clip
 from src.track3_fusion_confidence.fusion_engine import fuse_final_score, fuse_scores
 from src.track3_fusion_confidence.query_adapter import (
@@ -190,12 +191,22 @@ def load_negation_filter(cfg: dict):
 # ---------------------------------------------------------------- all tracks
 def run(video_path: str, query: str, use_qwen: bool = True, check_negation: bool = True,
         export_path: Optional[str] = None,
-        progress: Optional[Callable[[str, dict], None]] = None) -> PipelineReport:
+        progress: Optional[Callable[[str, dict], None]] = None,
+        prepare_in_parallel: bool = True) -> PipelineReport:
     """`progress(track, info)` is called as each track starts ({"state": "running"}) and when it
-    ends ({"state": "done", "seconds": ...})."""
+    ends ({"state": "done", "seconds": ...}).
+
+    With Qwen, Track 2 starts embedding the video's frames while Track 1 is still parsing the query
+    (frames don't depend on the query), so the two slow steps overlap instead of adding up."""
     cfg = load_config()
     report_progress = progress or (lambda track, info: None)
     timings = {}
+
+    preparing = None
+    if use_qwen and prepare_in_parallel:
+        preparing = ThreadPoolExecutor(max_workers=1)
+        prep_started = time.time()
+        prep_future = preparing.submit(prepare_video, video_path)
 
     def timed(track, fn):
         report_progress(track, {"state": "running"})
@@ -205,15 +216,30 @@ def run(video_path: str, query: str, use_qwen: bool = True, check_negation: bool
         report_progress(track, {"state": "done", "seconds": timings[track]})
         return value
 
-    parsed = timed("track1", lambda: parse_query(query, use_qwen))
-    print("Track 1:", parsed.to_dict())
+    try:
+        parsed = timed("track1", lambda: parse_query(query, use_qwen))
+        print("Track 1:", parsed.to_dict())
 
-    negation_filter = None
-    if parsed.has_negation and check_negation:
-        negation_filter = load_negation_filter(cfg)   # fail before the slow retrieval step
+        negation_filter = None
+        if parsed.has_negation and check_negation:
+            negation_filter = load_negation_filter(cfg)   # fail before the slow retrieval step
+    except BaseException:
+        if preparing is not None:
+            preparing.shutdown(wait=True)
+        raise
 
-    # Negated sub-queries stay out of CLIP retrieval: CLIP would look for the excluded concept.
-    frame_scores = timed("track2", lambda: retrieve(video_path, parsed.positive))
+    def track2():
+        if preparing is not None:
+            try:
+                prep_future.result()          # usually finished while Qwen was running
+            except Exception as exc:          # retrieve() embeds whatever is missing itself
+                print(f"Track 2: preparing the video failed ({exc}); embedding during retrieval")
+            timings["track2_prepare_overlapped"] = time.time() - prep_started
+            preparing.shutdown(wait=False)
+        # Negated sub-queries stay out of CLIP retrieval: CLIP would look for the excluded concept.
+        return retrieve(video_path, parsed.positive)
+
+    frame_scores = timed("track2", track2)
     print(f"Track 2: {len(frame_scores.timestamps)} frames scored, windows {frame_scores.windows}")
 
     result, candidates, fused = timed(
@@ -237,5 +263,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-qwen", action="store_true", help="use rule-based query parsing")
     parser.add_argument("--skip-negation-check", action="store_true", help="run without ConCLIP")
     parser.add_argument("--export", help="write the best segment to this .mp4 path")
+    parser.add_argument("--no-overlap", action="store_true",
+                        help="don't embed frames while Qwen runs (one step after the other)")
     args = parser.parse_args()
-    run(args.video, args.query, not args.no_qwen, not args.skip_negation_check, args.export)
+    run(args.video, args.query, not args.no_qwen, not args.skip_negation_check, args.export,
+        prepare_in_parallel=not args.no_overlap)

@@ -1,3 +1,4 @@
+import threading
 from typing import List
 import numpy as np
 import torch
@@ -17,14 +18,17 @@ else:
 
 _model = None
 _processor = None
+_load_lock = threading.Lock()   # video preparation and searches may load the model at the same time
 
 
 def _load_model():
     global _model, _processor
-    if _model is None:
-        _model = CLIPModel.from_pretrained(_MODEL_NAME).to(_DEVICE)
-        _model.eval()
-        _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
+    with _load_lock:
+        if _model is None:
+            model = CLIPModel.from_pretrained(_MODEL_NAME).to(_DEVICE)
+            model.eval()
+            _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
+            _model = model
     return _model, _processor
 
 

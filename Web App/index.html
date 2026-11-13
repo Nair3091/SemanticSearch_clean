@@ -82,6 +82,7 @@
     <input type="file" id="file" accept="video/*,.mkv" class="hidden">
     <video id="player" class="hidden" controls muted></video>
     <div id="fileLine" class="hidden"><span id="fileName"></span><button class="secondary" id="changeFile" type="button">Change video</button></div>
+    <div class="state hidden" id="prepState" style="margin-top:8px"></div>
     <div class="notice warn hidden" id="playerError" style="margin:10px 0 0">This browser cannot play this video's format. The search still works, and you will get the timestamps, but you will not be able to watch the moment here.</div>
   </section>
 
@@ -91,7 +92,7 @@
       <label for="query" style="margin-top:0">What are you looking for?</label>
       <input type="text" id="query" maxlength="300" placeholder="a dog running without a leash" autocomplete="off">
       <label>Track 1 query understanding</label>
-      <label class="choice"><input type="radio" name="track1" value="qwen" checked><span>Qwen3 model<small id="qwenNote">Full Track 1. About 2 to 5 minutes per search on a CPU.</small></span></label>
+      <label class="choice"><input type="radio" name="track1" value="qwen" checked><span>Qwen3 model<small id="qwenNote">Full Track 1. About 1.5 minutes per new query on a CPU; repeated queries are instant.</small></span></label>
       <label class="choice"><input type="radio" name="track1" value="rules"><span>Quick rules<small>Instant, for simple queries such as "a dog without a cat".</small></span></label>
       <div style="margin-top:14px"><button id="go" type="submit" disabled>Find the moment</button></div>
     </form>
@@ -136,7 +137,7 @@ const SERIES_COLORS = ["#2457c5", "#b3541e", "#6b3fa0", "#0f7c7c", "#8a5a00"];
 const STATUS_TEXT = { accepted: "Accepted", unverified: "Negation not checked", below_threshold: "Below threshold", failed_negation: "Failed negation" };
 const BAND_COLORS = { accepted: "#177245", unverified: "#8a5a00", below_threshold: "#9aa3b2", failed_negation: "#b3261e" };
 
-let videoFile = null, stopAt = null, pollTimer = null, startedAt = 0;
+let videoFile = null, videoId = null, uploading = false, stopAt = null, pollTimer = null, startedAt = 0, prepTimer = null;
 
 const clock = t => {
   const s = Math.max(0, t), m = Math.floor(s / 60), r = s - m * 60;
@@ -155,10 +156,45 @@ function setFile(file) {
   $("fileName").textContent = file.name;
   show("drop", false); show("player"); show("fileLine");
   clearResults();
-  updateGo();
+  uploadVideo(file);
 }
 
-function updateGo() { $("go").disabled = !videoFile || !$("query").value.trim() || pollTimer !== null; }
+// Upload as soon as a video is chosen, so Track 2 prepares its frames while the query is typed.
+async function uploadVideo(file) {
+  videoId = null; uploading = true; clearTimeout(prepTimer);
+  setPrep("Uploading the video...", "running");
+  updateGo();
+  const data = new FormData();
+  data.append("video", file);
+  try {
+    const res = await fetch("/api/videos", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || "Upload failed.");
+    if (file !== videoFile) return;              // another video was chosen meanwhile
+    videoId = body.video_id;
+    watchPrep(videoId);
+  } catch (err) {
+    if (file === videoFile) setPrep(err.message, "bad");
+  } finally {
+    if (file === videoFile) { uploading = false; updateGo(); }
+  }
+}
+
+function setPrep(text, cls) { const n = $("prepState"); n.textContent = text; n.className = "state " + (cls || ""); show("prepState"); }
+
+function watchPrep(id) {
+  fetch(`/api/videos/${id}`).then(r => r.json()).then(v => {
+    if (id !== videoId) return;
+    if (v.state === "ready") setPrep(`Video ready to search: ${v.frames} frames prepared in ${Math.round(v.seconds)}s.`, "done");
+    else if (v.state === "failed") setPrep("Preparing the video failed; searches will process frames themselves.", "");
+    else {
+      setPrep("Preparing the video for search while you type (Track 2 is processing its frames)...", "running");
+      prepTimer = setTimeout(() => watchPrep(id), 2000);
+    }
+  }).catch(() => {});
+}
+
+function updateGo() { $("go").disabled = !videoId || uploading || !$("query").value.trim() || pollTimer !== null; }
 
 function clearResults() {
   ["answer", "progress", "chart", "candidates", "formError"].forEach(id => show(id, false));
@@ -339,14 +375,14 @@ $("form").addEventListener("submit", async e => {
   ["t1Body", "t2Body", "t3Body"].forEach(id => $(id).replaceChildren());
   ["t1State", "t2State", "t3State"].forEach(id => setState(id, "Waiting"));
   const data = new FormData();
-  data.append("video", videoFile);
+  data.append("video_id", videoId);
   data.append("query", $("query").value.trim());
   data.append("track1", document.querySelector("input[name=track1]:checked").value);
-  $("go").disabled = true; $("go").textContent = "Uploading";
+  $("go").disabled = true; $("go").textContent = "Starting";
   try {
     const res = await fetch("/api/search", { method: "POST", body: data });
     const body = await res.json();
-    if (!res.ok) throw new Error(body.detail || "Upload failed.");
+    if (!res.ok) throw new Error(body.detail || "Could not start the search.");
     startedAt = Date.now();
     show("progress");
     $("go").textContent = "Searching";

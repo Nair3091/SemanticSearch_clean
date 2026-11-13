@@ -205,6 +205,19 @@ It runs one search at a time, deletes each uploaded video after its search, refu
 | `configs/config.yaml` | `softmax_logit_scale: 100`, `confidence_score: "softmax"`, `confidence_threshold` 0.185 → 0.15 (softmax), raw value kept as `raw_confidence_threshold` |
 | Tests | New `tests/conftest.py` and `test_softmax_and_cache.py`, plus retriever and pipeline tests; 82 in total |
 
+Then, to stop the slow steps waiting for each other:
+
+| File | Change |
+|---|---|
+| `src/track2_vision_retrieval/retriever.py` | New `prepare_video()`: embeds Pass 1 frames, and for videos up to `preindex_full_max_seconds` (60) the whole Pass 2 grid, before any query |
+| `src/track2_vision_retrieval/embedding/frame_cache.py`, `clip_encoder.py` | Locks so preparation and a search on the same video never embed a frame twice or load CLIP twice |
+| `scripts/run_pipeline.py` | With Qwen, Track 2 preparation runs while Track 1 parses; `--no-overlap` turns it off |
+| `Web App/app.py`, `index.html` | Videos upload and start preparing when chosen (`POST /api/videos`); searches send the video id; the last 3 uploads are kept and deleted on exit |
+| Tests | 90 in total |
+
+Measured on the 20-second test video with a new query: 101s one step after the other, 78s overlapped,
+47s with the video prepared on upload, 0.6s with Quick rules.
+
 ## Changes Outside the Repo
 
 Teammates won't get these through git.

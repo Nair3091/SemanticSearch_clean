@@ -1,4 +1,5 @@
 from typing import List
+import cv2
 import numpy as np
 
 from src.common.config import load_config
@@ -23,6 +24,32 @@ def _bank_embeddings(model_name: str) -> np.ndarray:
 def clear_caches() -> None:
     _bank_cache.clear()
     frame_cache.clear()
+
+
+def _duration(video_path: str) -> float:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Could not open video: {video_path}")
+    fps, count = cap.get(cv2.CAP_PROP_FPS), cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    cap.release()
+    return count / fps if fps > 0 else 0.0
+
+
+def prepare_video(video_path: str) -> dict:
+    """Embed a video's frames before any query is known, so a later retrieve() only scores them.
+    Always does the Pass-1 frames. A video up to `preindex_full_max_seconds` long also gets the
+    whole Pass-2 grid, which covers any windows a query could pick; a longer one gets its Pass-2
+    frames when a query needs them. Safe to run alongside retrieve() on the same video."""
+    c = load_config()["vision_retrieval"]
+    key = (frame_cache.video_key(video_path), c["clip_model_name"])
+    duration = _duration(video_path)
+    frames = coarse_sample(video_path, c["pass1_interval_seconds"])
+    full = duration <= c["preindex_full_max_seconds"]
+    if full:
+        frames += dense_resample(video_path, 0.0, duration, c["pass2_interval_seconds"])
+    frame_cache.embed_with_cache(key, frames, lambda missing: embed_frames(missing))
+    _bank_embeddings(c["clip_model_name"])
+    return {"duration": duration, "frames": frame_cache.cached_count(key), "full_grid": full}
 
 
 def retrieve(video_path: str, sub_queries: List[SubQuery]) -> FrameScores:
