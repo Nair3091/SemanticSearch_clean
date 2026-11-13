@@ -129,7 +129,9 @@ def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
             )
     finally:
         if past is not None:
-            past.crop(prefix_len)        # generate() appended to the shared cache: trim it back
+            extra = past.get_seq_length() - prefix_len
+            if extra > 0:
+                past.crop(-extra)        # generate() appended to the shared cache: trim it back
     if device == "cuda":
         torch.cuda.synchronize()
     elapsed = time.time() - start

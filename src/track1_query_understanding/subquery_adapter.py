@@ -88,12 +88,18 @@ def structured_to_subqueries(structured, original_query: str,
         if _negated_in_query(original_query, str(e["name"]).strip(), e.get("attributes"))
     }
 
-    def phrase(name):
+    def phrase(name, action=None):
         name = _clean(name)
         if name is None:
             return None
         ent = ents.get(name.lower())
-        return _noun_phrase(name, ent.get("attributes") if ent else [])
+        attrs = ent.get("attributes") if ent else []
+        # Qwen sometimes copies the event's verb onto an entity ("holding" on knife), which
+        # would give "a crab holding a holding knife": drop attributes that repeat the action.
+        verb = set((action or "").lower().split())
+        attrs = [a for a in attrs or []
+                 if not (verb and set(str(a).strip().lower().split()) <= verb)]
+        return _noun_phrase(name, attrs)
 
     out: List[SubQuery] = []
     trace: List[str] = []
@@ -124,7 +130,7 @@ def structured_to_subqueries(structured, original_query: str,
         for n in (subj, obj):
             if n:
                 covered.add(n.lower())
-        sp, op = phrase(subj), phrase(obj)
+        sp, op = phrase(subj, action), phrase(obj, action)
         if sp and op and not action:
             text = f"{sp} and {op}"
         else:

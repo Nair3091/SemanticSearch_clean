@@ -122,3 +122,19 @@ def test_missed_negation_event_is_replaced():
     sq, trace = structured_to_subqueries(s, "a dog without a cat")
     assert _texts(sq) == [("a dog", False), ("a cat", True)]
     assert "dropped" in trace[0]
+
+def test_attribute_repeating_the_action_is_dropped():
+    # real Qwen3-1.7B output for "crab holding a knife": "holding" copied onto knife
+    s = {"entities": [{"type": "object", "name": "crab", "attributes": []},
+                      {"type": "object", "name": "knife", "attributes": ["holding"]}],
+         "events": [{"event_id": 1, "action": "holding", "subject": "crab", "object": "knife", "negated": False}]}
+    assert _texts(structured_to_subqueries(s, "crab holding a knife")[0]) == [("a crab holding a knife", False)]
+
+
+def test_multi_word_action_copied_as_attribute_is_dropped():
+    # real Qwen3-1.7B output: "picked up" copied onto suitcase
+    s = {"entities": [{"type": "person", "name": "woman", "attributes": []},
+                      {"type": "object", "name": "suitcase", "attributes": ["picked up", "large"]}],
+         "events": [{"event_id": 1, "action": "picked up", "subject": "woman", "object": "suitcase", "negated": False}]}
+    assert _texts(structured_to_subqueries(s, "a woman picked up a large suitcase")[0]) == \
+        [("a woman picked up a large suitcase", False)]
