@@ -71,6 +71,7 @@
 </header>
 <main>
   <div class="wide hidden notice warn" id="negWarning"></div>
+  <div class="wide hidden notice warn" id="modelNote"></div>
 
   <section class="panel">
     <h2>Video</h2>
@@ -114,7 +115,7 @@
   </section>
 
   <section class="panel wide hidden" id="chart">
-    <h2>Match score over time (click to jump to that moment)</h2>
+    <h2 id="chartTitle">Match score over time (click to jump to that moment)</h2>
     <div id="chartBody"></div>
     <div class="legend" id="legend"></div>
   </section>
@@ -122,7 +123,7 @@
   <section class="panel wide hidden" id="candidates">
     <h2>All candidate moments</h2>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Moment</th><th>Decision</th><th class="num">Match</th><th class="num">Absence</th><th class="num">Frames passing</th><th class="num">Final</th><th></th></tr></thead>
+      <thead><tr><th>Moment</th><th>Decision</th><th class="num">Confidence</th><th class="num">Absence</th><th class="num">Frames passing</th><th class="num">Final</th><th></th></tr></thead>
       <tbody id="candidateRows"></tbody>
     </table></div>
   </section>
@@ -276,7 +277,10 @@ function renderChart(r) {
 
   const legend = $("legend"); legend.replaceChildren();
   const key = (label, color, band) => { const s = el("span"); const sw = el("span", null, "swatch" + (band ? " band" : "")); sw.style.background = color; s.append(sw, document.createTextNode(label)); legend.append(s); };
-  key(tl.series.length > 1 ? "Combined score (weakest part)" : "Match score", "#1c2230");
+  $("chartTitle").textContent = (r.score_kind === "softmax"
+    ? "Confidence over time, 0 to 1, against 80 everyday objects"
+    : "Match score over time") + " (click to jump to that moment)";
+  key(tl.series.length > 1 ? "Combined (weakest part)" : (r.score_kind === "softmax" ? "Confidence" : "Match score"), "#1c2230");
   if (tl.series.length > 1) tl.series.forEach((s, i) => key(s.label, SERIES_COLORS[i % SERIES_COLORS.length]));
   key(`Threshold ${r.threshold}`, "#5f6b7d");
   [...new Set(r.candidates.map(c => c.status))].forEach(st => key(STATUS_TEXT[st], BAND_COLORS[st], true));
@@ -354,8 +358,20 @@ $("form").addEventListener("submit", async e => {
   }
 });
 
+function watchModels() {
+  fetch("/api/status").then(r => r.json()).then(s => {
+    const loading = s.models === "loading";
+    $("modelNote").textContent = loading
+      ? "Loading the models in the background (about 1 to 2 minutes). You can start a search now; it will begin when loading finishes."
+      : `Some models could not be preloaded (${s.models}). Searches will load them when needed.`;
+    show("modelNote", loading || s.models.startsWith("failed"));
+    if (loading) setTimeout(watchModels, 3000);
+  }).catch(() => {});
+}
+watchModels();
+
 fetch("/api/status").then(r => r.json()).then(s => {
-  $("qwenNote").textContent = `Full Track 1 (${s.qwen_model}). About 2 to 5 minutes per search on a CPU.`;
+  $("qwenNote").textContent = `Full Track 1 (${s.qwen_model}). About 1.5 to 2 minutes per new query on a CPU; repeated queries are instant.`;
   if (!s.negation_ready) {
     $("negWarning").textContent = `Track 3 negation check is not available: ${s.negation_reason}. Queries with negation will be marked as not checked.`;
     show("negWarning");

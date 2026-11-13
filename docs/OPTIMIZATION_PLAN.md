@@ -1,6 +1,22 @@
 # Optimization Plan
 
-How to make SemanticSearch faster while keeping all three tracks. None of these changes have been made yet.
+How to make SemanticSearch faster while keeping all three tracks.
+
+## Done (13 Nov 2026)
+
+Phase 1 is in place, plus the softmax confidence suggested for Track 2. Measured on the same 20-second
+test video and laptop CPU:
+
+| Change | Track | Measured |
+|---|---|---|
+| Frame embeddings reused per video (`embedding/frame_cache.py`), which also covers repeated Pass 2 frames | 2 | First search ~32s; later searches on the same video 0.3–0.6s |
+| Qwen prompt prefix processed once and reused (`track1_qwen.py`) | 1 | 134s → 92s and 120s → 93s, identical output |
+| Repeated queries skip Qwen (`decomposer.py`) | 1 | Instant |
+| Models preload at app start (`Web App/app.py`) | All | 71s for Qwen at startup instead of during the first search |
+| Softmax confidence for accept/reject (`scoring/softmax_confidence.py`) | 2 and 3 | 18 of 19 searches correct at 0.25; real matches ≥ 0.208, absent ≤ 0.056 |
+
+Raw cosine still locates moments; softmax only decides accept or reject. The sections below are the
+original plan; Phase 2 and Phase 3 are still to do.
 
 **Main finding:** nearly all the time goes into two things, Qwen generating text in Track 1 and CLIP ViT-L/14 embedding frames in Track 2. Decoding video, scoring frames and Track 3 are already fast.
 

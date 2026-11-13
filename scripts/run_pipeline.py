@@ -47,9 +47,11 @@ class PipelineReport:
     frame_scores: Any
     result: RetrievalResult
     candidates: List[dict]            # best first; see select_result for the fields
-    fused: Any
+    fused: Any                        # fused accept/reject score per frame
     negation_checked: bool
     timings: dict = field(default_factory=dict)
+    threshold: float = 0.0
+    score_kind: str = "softmax"       # "softmax" or "raw"
 
 
 # ---------------------------------------------------------------- Track 1
@@ -73,9 +75,10 @@ def parse_query(query: str, use_qwen: bool = True) -> ParsedQuery:
 
 # ---------------------------------------------------------------- Track 3
 def build_segments(timestamps: np.ndarray, fused: np.ndarray, windows, score_drop: float,
-                   min_length: float) -> list:
+                   min_length: float, confidence: Optional[np.ndarray] = None) -> list:
     """One candidate per Pass-2 window: the frames around its peak that stay within
-    `score_drop` of that peak. The confidence is the peak's fused score."""
+    `score_drop` of that peak, using the raw fused score to locate it. The segment's confidence is
+    the best `confidence` value inside it, or the raw peak when no confidence is given."""
     segments = []
     for start, end in windows:
         idx = np.flatnonzero((timestamps >= start) & (timestamps <= end))
@@ -89,8 +92,17 @@ def build_segments(timestamps: np.ndarray, fused: np.ndarray, windows, score_dro
         while right < idx.size - 1 and fused[idx[right + 1]] >= floor:
             right += 1
         t0, t1 = float(timestamps[idx[left]]), float(timestamps[idx[right]])
-        segments.append(CandidateSegment(t0, max(t1, t0 + min_length), float(fused[idx[peak]])))
+        score = fused[idx[peak]] if confidence is None else confidence[idx[left:right + 1]].max()
+        segments.append(CandidateSegment(t0, max(t1, t0 + min_length), float(score)))
     return segments
+
+
+def confidence_setup(frame_scores, cfg: dict):
+    """(series per sub-query, threshold, name) for the accept/reject score."""
+    fc = cfg["fusion_confidence"]
+    if fc.get("confidence_score", "softmax") == "softmax" and frame_scores.confidence is not None:
+        return frame_scores.confidence, fc["confidence_threshold"], "softmax"
+    return frame_scores.scores, fc.get("raw_confidence_threshold", fc["confidence_threshold"]), "raw"
 
 
 def select_result(video_path: str, parsed: ParsedQuery, frame_scores, cfg: dict, negation_filter=None):
@@ -99,10 +111,12 @@ def select_result(video_path: str, parsed: ParsedQuery, frame_scores, cfg: dict,
     pass_ratio and frames_checked. status is one of: accepted, unverified, below_threshold,
     failed_negation."""
     fc = cfg["fusion_confidence"]
-    threshold = fc["confidence_threshold"]
-    fused = fuse_scores(frame_scores.scores, fc["aggregation"])
-    segments = build_segments(frame_scores.timestamps, fused, frame_scores.windows,
-                              fc["segment_score_drop"], cfg["vision_retrieval"]["pass2_interval_seconds"])
+    series, threshold, _ = confidence_setup(frame_scores, cfg)
+    raw_fused = fuse_scores(frame_scores.scores, fc["aggregation"])
+    fused = fuse_scores(series, fc["aggregation"])
+    segments = build_segments(frame_scores.timestamps, raw_fused, frame_scores.windows,
+                              fc["segment_score_drop"], cfg["vision_retrieval"]["pass2_interval_seconds"],
+                              confidence=fused)
 
     def row(seg, status, final=None, **extra):
         return {"start": seg.start_time, "end": seg.end_time, "retrieval_confidence": seg.fused_confidence,
@@ -211,7 +225,9 @@ def run(video_path: str, query: str, use_qwen: bool = True, check_negation: bool
     if result.accepted and export_path:
         method = export_clip(video_path, result.segment.start_time, result.segment.end_time, export_path)
         print(f"Clip written to {export_path} ({method})")
-    return PipelineReport(parsed, frame_scores, result, candidates, fused, negation_filter is not None, timings)
+    _, threshold, score_kind = confidence_setup(frame_scores, cfg)
+    return PipelineReport(parsed, frame_scores, result, candidates, fused, negation_filter is not None,
+                          timings, threshold, score_kind)
 
 
 if __name__ == "__main__":

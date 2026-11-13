@@ -51,8 +51,45 @@ def load_model(model_name=DEFAULT_MODEL):
     model.eval()
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    _state.update(model=model, tokenizer=tokenizer, device=device, name=model_name)
+    _state.update(model=model, tokenizer=tokenizer, device=device, name=model_name,
+                  prefix_key=None, prefix_ids=None, prefix_past=None)
     return model_name, device
+
+
+QUERY_MARKER = "User Query:\n"
+
+
+def _prefix_cache(formatted_text, input_ids):
+    """The prompt is ~2,800 fixed tokens with the query at the end. Process everything up to
+    QUERY_MARKER once per model and reuse it, so each query only processes its own few tokens.
+    Returns (prefix_length, cache), or (0, None) when the prompt has no marker or a different start.
+    Measured on CPU: 131s -> 101s for one query, with identical output."""
+    import torch
+    end = formatted_text.rfind(QUERY_MARKER)
+    if end < 0:
+        return 0, None
+    prefix = formatted_text[:end + len(QUERY_MARKER)]
+    if _state.get("prefix_key") != (_state["name"], prefix):
+        ids = _state["tokenizer"](prefix, return_tensors="pt")["input_ids"].to(_state["device"])
+        with torch.inference_mode():
+            past = _state["model"](input_ids=ids, use_cache=True).past_key_values
+        _state.update(prefix_key=(_state["name"], prefix), prefix_ids=ids, prefix_past=past)
+    ids = _state["prefix_ids"]
+    n = ids.shape[1]
+    if input_ids.shape[1] <= n or not torch.equal(input_ids[0, :n], ids[0]):
+        return 0, None
+    return n, _state["prefix_past"]
+
+
+def warm_up(model_name=DEFAULT_MODEL):
+    """Load the model and build the prompt cache, so the first real query is not slower."""
+    load_model(model_name)
+    tokenizer = _state["tokenizer"]
+    text = tokenizer.apply_chat_template(
+        [{"role": "system", "content": SYSTEM_MESSAGE},
+         {"role": "user", "content": PROMPT_FINAL + "\n\n" + QUERY_MARKER + "x"}],
+        tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    _prefix_cache(text, tokenizer(text, return_tensors="pt")["input_ids"].to(_state["device"]))
 
 
 def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
@@ -73,20 +110,26 @@ def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
     if input_tokens > MAX_INPUT_TOKENS:
         raise ValueError(f"Prompt is {input_tokens} tokens, over the {MAX_INPUT_TOKENS} limit.")
     inputs = {k: v.to(device) for k, v in inputs.items()}
+    prefix_len, past = _prefix_cache(formatted_text, inputs["input_ids"])
 
     if device == "cuda":
         torch.cuda.synchronize()
     start = time.time()
-    with torch.inference_mode():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            repetition_penalty=1.05,
-            use_cache=True,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
+    try:
+        with torch.inference_mode():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                repetition_penalty=1.05,
+                use_cache=True,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+                **({"past_key_values": past} if past is not None else {}),
+            )
+    finally:
+        if past is not None:
+            past.crop(prefix_len)        # generate() appended to the shared cache: trim it back
     if device == "cuda":
         torch.cuda.synchronize()
     elapsed = time.time() - start
@@ -97,7 +140,8 @@ def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
     if verbose:
         warn = (f"  WARNING: over the notebook's {NOTEBOOK_INPUT_CAP}-token cap (it would have truncated the query)"
                 if input_tokens > NOTEBOOK_INPUT_CAP else "")
-        print(f"  [qwen] {input_tokens} input tokens, {len(generated)} new tokens, {elapsed:.1f}s{warn}")
+        cached = f" ({prefix_len} reused from the prompt cache)" if past is not None else ""
+        print(f"  [qwen] {input_tokens} input tokens{cached}, {len(generated)} new tokens, {elapsed:.1f}s{warn}")
 
     del inputs, outputs
     if device == "cuda":

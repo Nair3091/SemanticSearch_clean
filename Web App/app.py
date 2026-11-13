@@ -4,6 +4,11 @@ Local demo for all three tracks. Upload a short video, type what to find, get th
 Start it from the repo root (it opens your browser):
     python "Web App/app.py"
 
+Models load in the background at startup, so the first search does not pay for it. Options:
+    --no-qwen-preload   do not preload Qwen (saves about 9 GB of RAM if you only use Quick rules)
+    --no-preload        load every model on the first search instead
+    --no-browser        do not open a browser tab
+
 All pipeline logic lives in scripts/run_pipeline.py. This file only handles uploads, runs one
 search at a time in the background, and reports progress to the page.
 """
@@ -36,6 +41,27 @@ app = FastAPI(title="SemanticSearch demo")
 _jobs = {}
 _jobs_lock = threading.Lock()
 _worker = ThreadPoolExecutor(max_workers=1)   # the models are shared, so searches run one at a time
+_models = {"state": "not loaded"}             # "loading", "ready", or "failed: ..."
+
+
+def warm_up(include_qwen: bool = True):
+    """Load every model before the first search. Runs on the search worker, so a search started
+    meanwhile simply waits instead of competing for the CPU."""
+    _models["state"] = "loading"
+    try:
+        from src.track2_vision_retrieval import retriever
+        from src.track2_vision_retrieval.embedding.clip_encoder import _load_model
+        cfg = load_config()
+        _load_model()
+        retriever._bank_embeddings(cfg["vision_retrieval"]["clip_model_name"])
+        if run_pipeline.negation_status(cfg)[0]:
+            run_pipeline.load_negation_filter(cfg)
+        if include_qwen:
+            from src.track1_query_understanding import decomposer
+            decomposer.warm_up()
+        _models["state"] = "ready"
+    except Exception as exc:   # a search will still try to load the models itself
+        _models["state"] = f"failed: {type(exc).__name__}: {exc}"
 
 
 def probe_video(path: str):
@@ -64,13 +90,16 @@ def report_to_dict(report, duration: float) -> dict:
         "message": report.result.message,
         "best": report.candidates[0] if report.candidates else None,
         "candidates": report.candidates,
-        "threshold": load_config()["fusion_confidence"]["confidence_threshold"],
+        "threshold": report.threshold,
+        "score_kind": report.score_kind,
         "parsed": parsed.to_dict(),
         "negation_checked": report.negation_checked,
         "timeline": {
             "timestamps": round_list(fs.timestamps),
             "fused": round_list(report.fused),
-            "series": [{"label": q.text, "scores": round_list(s)} for q, s in zip(parsed.positive, fs.scores)],
+            "series": [{"label": q.text, "scores": round_list(s)} for q, s in zip(
+                parsed.positive,
+                fs.confidence if report.score_kind == "softmax" and fs.confidence is not None else fs.scores)],
             "windows": [[float(a), float(b)] for a, b in fs.windows],
         },
     }
@@ -100,7 +129,7 @@ def index():
 def status():
     cfg = load_config()
     ready, reason = run_pipeline.negation_status(cfg)
-    return {"negation_ready": ready, "negation_reason": reason,
+    return {"negation_ready": ready, "negation_reason": reason, "models": _models["state"],
             "qwen_model": cfg["query_understanding"]["qwen3_model_name"],
             "clip_model": cfg["vision_retrieval"]["clip_model_name"]}
 
@@ -151,6 +180,9 @@ def job(job_id: str):
 if __name__ == "__main__":
     url = f"http://{HOST}:{PORT}"
     print(f"\nSemanticSearch demo: {url}   (press Ctrl+C to stop)\n")
+    if "--no-preload" not in sys.argv:
+        # --no-qwen-preload saves about 9 GB of RAM when you only use Quick rules
+        _worker.submit(warm_up, "--no-qwen-preload" not in sys.argv)
     if "--no-browser" not in sys.argv:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

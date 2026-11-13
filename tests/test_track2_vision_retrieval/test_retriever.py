@@ -29,7 +29,8 @@ def fake_clip(monkeypatch):
     def fake_embed_text(texts):
         return np.tile(np.array([[1.0, 0.0]], dtype=np.float32), (len(texts), 1))
 
-    cfg = {"vision_retrieval": {"pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
+    cfg = {"vision_retrieval": {"clip_model_name": "fake", "softmax_logit_scale": 100.0,
+                                "pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
                                 "top_k_windows": 1, "window_radius_seconds": 1.0}}
     monkeypatch.setattr(retriever, "embed_frames", fake_embed_frames)
     monkeypatch.setattr(retriever, "embed_text", fake_embed_text)
@@ -68,3 +69,18 @@ def test_all_negated_picks_weakest_frames(video):
 def test_empty_sub_queries_raises(video):
     with pytest.raises(ValueError):
         retriever.retrieve(video, [])
+
+def test_repeat_search_reuses_frame_embeddings(video, monkeypatch):
+    calls = []
+    real = retriever.embed_frames
+    monkeypatch.setattr(retriever, "embed_frames", lambda frames: calls.append(len(frames)) or real(frames))
+    first = retriever.retrieve(video, [SubQuery("bright", False)])
+    second = retriever.retrieve(video, [SubQuery("something else", False)])
+    assert sum(calls) == len(first.timestamps)                 # every frame embedded once, never again
+    assert np.array_equal(first.timestamps, second.timestamps)
+
+
+def test_confidence_is_returned_per_sub_query(video):
+    r = retriever.retrieve(video, [SubQuery("a", False), SubQuery("b", True)])
+    assert len(r.confidence) == 2 and r.confidence[0].shape == r.scores[0].shape
+    assert all(((c >= 0) & (c <= 1)).all() for c in r.confidence)

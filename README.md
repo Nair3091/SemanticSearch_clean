@@ -24,7 +24,7 @@ what must appear + what must not appear
   │           Pass 1 samples every 2s, Pass 2 every 0.25s around the best frames
   ▼
 frame scores over time
-  │  Track 3: min-fusion, confidence threshold, then the ConCLIP ViT-B/32 absence check
+  │  Track 3: min-fusion, softmax confidence threshold, then the ConCLIP ViT-B/32 absence check
   ▼
 best moment with start and end times, or a rejection
 ```
@@ -32,6 +32,12 @@ best moment with start and end times, or a rejection
 Negated concepts never go to CLIP retrieval, because CLIP would look for the thing the user wants
 excluded. Instead, a frame passes the Track 3 check if its ConCLIP similarity to the excluded
 concept is low.
+
+Raw CLIP scores decide **where** a moment is. Whether to **accept** it is decided by a softmax
+confidence: the query competes against the 80 COCO object names, and the score is the probability
+that the query wins (0 to 1). Distractors that are the query itself or a kind of it are left out,
+so `an animal` is not beaten by `a cat`. Set `confidence_score: "raw"` in the config to compare with
+plain cosine scores.
 
 ## Project Structure
 
@@ -67,6 +73,8 @@ SemanticSearch_clean/
 │   │   ├── retriever.py           # retrieve(): the Track 2 entry point
 │   │   ├── sampling/two_pass_sampler.py
 │   │   ├── embedding/clip_encoder.py
+│   │   ├── embedding/frame_cache.py  # reuses frame embeddings across searches on a video
+│   │   ├── scoring/softmax_confidence.py   # query vs 80 COCO distractors, 0 to 1
 │   │   └── indexing/faiss_index.py   # not used by retrieve() yet
 │   └── track3_fusion_confidence/
 │       ├── query_adapter.py       # splits sub-queries into what must and must not appear
@@ -137,6 +145,10 @@ python "Web App/app.py"
 This opens the demo at http://127.0.0.1:8000. On Windows you can also double-click
 `Web App/start_demo.bat`.
 
+The models load in the background when the app starts (about 1 to 2 minutes), so the first search
+doesn't pay for it. Add `--no-qwen-preload` to skip loading Qwen (saves about 9 GB of RAM if you only
+use Quick rules), or `--no-preload` to load everything on the first search instead.
+
 1. Drop in a short video.
 2. Describe what you are looking for.
 3. Choose how to parse the query. **Quick rules** is instant and handles simple queries such as
@@ -170,15 +182,23 @@ Tested on one 20-second video of four known scenes, on a CPU:
 
 | Check | Result |
 |---|---|
-| Finding the right scene with real CLIP | 4 of 4 |
+| Full searches (objects, phrases, general words, absent things, negation) | 18 of 19 correct at threshold 0.25; the 0.15 now used separates all 19 |
 | Negation check on concepts not used to choose its cutoff | 23 of 24 |
-| Full searches with negation | 4 of 5 |
+
+| Speed | Before | Now |
+|---|---|---|
+| Track 2, first search on a video | ~38s | ~32s |
+| Track 2, later searches on the same video | ~38s | 0.3–0.6s |
+| Track 1 (Qwen), new query | 120–134s | 91–93s, identical output |
+| Track 1 (Qwen), repeated query | 120–134s | instant |
 
 These numbers come from one small video made from still photos, so they are not an accuracy measurement.
 
 Known limitations:
 
-- `confidence_threshold` and `frame_threshold` come from that one video and still need calibrating.
+- `confidence_threshold` (softmax) and `frame_threshold` come from that one video and still need
+  calibrating. The softmax confidence only knows the 80 COCO objects as competitors, so things outside
+  them compete less and general words outside the COCO groups may still score low.
   `segment_score_drop` and `fusion_weight` are uncalibrated placeholders.
 - Qwen3-1.7B often misses negation. The adapter fixes several of its mistakes, and the pipeline falls
   back to rules if a negation word in the query was lost.

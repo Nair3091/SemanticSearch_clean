@@ -12,12 +12,19 @@ vision_retrieval:
   top_k_windows: 5
   faiss_index_path: "data/faiss_index/index.faiss"
   window_radius_seconds: 3.0
+  softmax_logit_scale: 100.0   # CLIP's own temperature; used for the softmax confidence
 
 fusion_confidence:
   aggregation: "min"
-  # ViT-L/14 raw cosine. Set from one test video: present 0.21-0.25, absent 0.10-0.16.
-  # Still to calibrate against the NegBench/QVHighlights dev set.
-  confidence_threshold: 0.185
+  # Accept/reject uses "softmax" (the query against 80 COCO distractors, 0 to 1) or "raw" cosine.
+  # Raw cosine is always what locates the moment.
+  confidence_score: "softmax"
+  # Softmax. From one test video: real matches 0.21-0.997, absent concepts up to 0.056, so this
+  # sits in the middle of the gap. Still to calibrate against the NegBench/QVHighlights dev set.
+  confidence_threshold: 0.15
+  # Raw ViT-L/14 cosine, used only when confidence_score is "raw". From the same video:
+  # real matches from 0.18, absent up to 0.17, so this margin is small.
+  raw_confidence_threshold: 0.185
   segment_score_drop: 0.02     # segment = frames around a peak within this much of it; not calibrated
   negation:
     conclip_weights_path: "data/conclip/conclip_b32_openclip_version.pt"   # gitignored, from NegBench

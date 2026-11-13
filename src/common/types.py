@@ -41,3 +41,4 @@ class FrameScores:
     scores: List[Any]          # one np.ndarray (N,) per sub-query, same order as the input
     is_dense: Any              # np.ndarray (N,) bool, True if the frame came from Pass 2
     windows: List[Any]         # [(start, end), ...] windows used in Pass 2
+    confidence: Optional[List[Any]] = None   # per sub-query softmax vs a distractor bank, in [0, 1]

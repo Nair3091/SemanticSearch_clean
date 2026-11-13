@@ -5,17 +5,40 @@ from src.common.config import load_config
 from src.common.types import FrameScores, SubQuery
 from src.track2_vision_retrieval.sampling.two_pass_sampler import (
     coarse_sample, dense_resample, select_promising_windows)
+from src.track2_vision_retrieval.embedding import frame_cache
+from src.track2_vision_retrieval.scoring import softmax_confidence
 from src.track2_vision_retrieval.embedding.clip_encoder import embed_frames, embed_text, score_frames
+
+
+_bank_cache = {}
+
+
+def _bank_embeddings(model_name: str) -> np.ndarray:
+    """Text embeddings of the 80 distractors, computed once per CLIP model."""
+    if model_name not in _bank_cache:
+        _bank_cache[model_name] = embed_text(softmax_confidence.BANK)
+    return _bank_cache[model_name]
+
+
+def clear_caches() -> None:
+    _bank_cache.clear()
+    frame_cache.clear()
 
 
 def retrieve(video_path: str, sub_queries: List[SubQuery]) -> FrameScores:
     if len(sub_queries) == 0:
         raise ValueError("sub_queries must not be empty")
     c = load_config()["vision_retrieval"]
+    key = (frame_cache.video_key(video_path), c["clip_model_name"])
+
+    def embed(frames):
+        # look up embed_frames at call time so tests can replace it
+        return frame_cache.embed_with_cache(key, frames, lambda missing: embed_frames(missing))
 
     text_emb = embed_text([q.text for q in sub_queries])             # (M, D)
     coarse = coarse_sample(video_path, c["pass1_interval_seconds"])
-    coarse_scores = score_frames(embed_frames(coarse), text_emb)     # (N, M)
+    coarse_emb = embed(coarse)
+    coarse_scores = score_frames(coarse_emb, text_emb)               # (N, M)
 
     # Window guidance: min over positive sub-queries; if all are negated,
     # frames where the negated concept is weakest are the promising ones.
@@ -31,19 +54,27 @@ def retrieve(video_path: str, sub_queries: List[SubQuery]) -> FrameScores:
     dense = []
     for s, e in windows:
         dense.extend(dense_resample(video_path, s, e, c["pass2_interval_seconds"]))
-    dense_scores = score_frames(embed_frames(dense), text_emb)
+    dense_emb = embed(dense)
 
     rows = {}
-    for f, r in zip(coarse, coarse_scores):
-        rows[round(f.timestamp, 3)] = (r, False)
-    for f, r in zip(dense, dense_scores):    # dense overwrites coarse at equal timestamps
-        rows[round(f.timestamp, 3)] = (r, True)
+    for f, e in zip(coarse, coarse_emb):
+        rows[round(f.timestamp, 3)] = (e, False)
+    for f, e in zip(dense, dense_emb):       # dense overwrites coarse at equal timestamps
+        rows[round(f.timestamp, 3)] = (e, True)
 
     keys = sorted(rows)
-    S = np.stack([rows[k][0] for k in keys]) if keys else np.zeros((0, len(sub_queries)))
+    if keys:
+        F = np.stack([rows[k][0] for k in keys])
+        S = score_frames(F, text_emb)
+        bank = score_frames(F, _bank_embeddings(c["clip_model_name"]))
+        confidence = softmax_confidence.confidence(S, bank, [q.text for q in sub_queries],
+                                                   c["softmax_logit_scale"])
+    else:
+        S = confidence = np.zeros((0, len(sub_queries)))
     return FrameScores(
         timestamps=np.array(keys),
         scores=[S[:, j] for j in range(S.shape[1])],
         is_dense=np.array([rows[k][1] for k in keys], dtype=bool),
         windows=windows,
+        confidence=[confidence[:, j] for j in range(confidence.shape[1])],
     )

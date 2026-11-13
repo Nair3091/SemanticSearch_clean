@@ -2,13 +2,12 @@
 
 This compares the repo as first cloned (commit `dfc8f1e`, "clean repo commit") with the current state.
 
-- **Pushed:** commit `cac5454` on the branch `integration/three-tracks-web-app`. It changes 52 files, with 1,919 lines added and 173 removed. `main` is still at `dfc8f1e`.
-- **Not committed yet:** the updated `README.md`, this file and `docs/OPTIMIZATION_PLAN.md`.
+- **Commits on `integration/three-tracks-web-app`:** `cac5454` (all three tracks and the Web App), `6d2dfd5` (README and these docs), then the optimization round in section 11. `main` is still at `dfc8f1e`.
 
 To see the code differences yourself:
 
 ```bash
-git diff -M dfc8f1e cac5454
+git diff -M dfc8f1e HEAD
 ```
 
 ## Summary
@@ -190,6 +189,21 @@ It runs one search at a time, deletes each uploaded video after its search, refu
 | `README.md` | Updated structure, setup, demo, testing and current status |
 | `docs/OPTIMIZATION_PLAN.md` | New |
 | `docs/CHANGES_SINCE_CLONE.md` | New (this file) |
+
+## 11. Optimization Round (13 Nov 2026)
+
+| File | Change |
+|---|---|
+| `src/track2_vision_retrieval/embedding/frame_cache.py` | New: reuses frame embeddings per video (file hash), CLIP model and timestamp |
+| `src/track2_vision_retrieval/scoring/softmax_confidence.py` | New: softmax of the query against the 80 COCO objects, leaving out the query itself and kinds of it |
+| `src/track2_vision_retrieval/retriever.py` | Uses the frame cache; returns softmax `confidence` alongside raw `scores` |
+| `src/common/types.py` | `FrameScores` gains an optional `confidence` field |
+| `src/track1_query_understanding/track1_qwen.py` | Prompt prefix cache and `warm_up()`; output unchanged |
+| `src/track1_query_understanding/decomposer.py` | Query cache and `warm_up()` |
+| `scripts/run_pipeline.py` | Raw scores locate moments; softmax (or raw, by config) decides acceptance |
+| `Web App/app.py`, `index.html` | Background model preloading, `--no-preload` and `--no-qwen-preload`, confidence chart |
+| `configs/config.yaml` | `softmax_logit_scale: 100`, `confidence_score: "softmax"`, `confidence_threshold` 0.185 → 0.15 (softmax), raw value kept as `raw_confidence_threshold` |
+| Tests | New `tests/conftest.py` and `test_softmax_and_cache.py`, plus retriever and pipeline tests; 82 in total |
 
 ## Changes Outside the Repo
 

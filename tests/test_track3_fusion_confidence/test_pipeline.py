@@ -13,12 +13,15 @@ from src.track1_query_understanding import track1_qwen
 from src.track2_vision_retrieval import retriever
 from src.track3_fusion_confidence.negation_filter import SegmentNegationResult
 from src.track3_fusion_confidence.query_adapter import from_sub_queries
+from src.track2_vision_retrieval.scoring import softmax_confidence
 
 CFG = {
-    "vision_retrieval": {"pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
+    "vision_retrieval": {"clip_model_name": "fake", "softmax_logit_scale": 100.0,
+                         "pass1_interval_seconds": 2.0, "pass2_interval_seconds": 0.25,
                          "top_k_windows": 2, "window_radius_seconds": 1.0},
-    "fusion_confidence": {"aggregation": "min", "confidence_threshold": 0.5, "segment_score_drop": 0.02,
-                          "negation": {"fusion_weight": 0.5}},
+    # raw scores: the stand-in CLIP below cannot produce a meaningful softmax confidence
+    "fusion_confidence": {"aggregation": "min", "confidence_score": "raw", "confidence_threshold": 0.5,
+                          "segment_score_drop": 0.02, "negation": {"fusion_weight": 0.5}},
 }
 
 
@@ -158,7 +161,7 @@ def test_full_run_only_sends_positives_to_retrieval(video, monkeypatch):
         return np.stack(out)
 
     def fake_embed_text(texts):
-        seen.extend(texts)
+        seen.extend(t for t in texts if t not in softmax_confidence.BANK)
         return np.tile(np.array([[1.0, 0.0]], dtype=np.float32), (len(texts), 1))
 
     monkeypatch.setattr(retriever, "embed_frames", fake_embed_frames)
@@ -184,3 +187,34 @@ def test_missing_conclip_weights_stop_the_run_before_retrieval(video, monkeypatc
     assert rp.negation_status(cfg)[0] is False
     with pytest.raises(FileNotFoundError):
         rp.run(video, "a dog without a cat", use_qwen=False)
+
+
+def test_softmax_confidence_decides_while_raw_scores_locate():
+    # raw scores peak at t=6, but only the moment at t=0 is clearly the query by softmax
+    fs = two_moments()
+    fs.confidence = [np.array([0.9, 0.1, 0.1, 0.2], dtype=np.float32)]
+    cfg = {**CFG, "fusion_confidence": {**CFG["fusion_confidence"], "confidence_score": "softmax",
+                                        "confidence_threshold": 0.25, "raw_confidence_threshold": 0.5}}
+    result, candidates, fused = rp.select_result("v", parsed(), fs, cfg)
+    assert result.accepted and result.segment.start_time == 0.0
+    assert [c["status"] for c in candidates] == ["accepted", "below_threshold"]
+    assert np.allclose(fused, fs.confidence[0])
+
+
+def test_raw_mode_ignores_the_softmax_confidence():
+    fs = two_moments()
+    fs.confidence = [np.zeros(4, dtype=np.float32)]
+    cfg = {**CFG, "fusion_confidence": {**CFG["fusion_confidence"], "confidence_score": "raw",
+                                        "raw_confidence_threshold": 0.5}}
+    result, _, _ = rp.select_result("v", parsed(), fs, cfg)
+    assert result.accepted and result.segment.start_time == 6.0
+
+
+def test_repeated_qwen_query_is_parsed_once(monkeypatch):
+    calls = []
+    monkeypatch.setattr(track1_qwen, "load_model", lambda name: (name, "cpu"))
+    monkeypatch.setattr(track1_qwen, "understand_query", lambda q: calls.append(q) or {"structured_query": {
+        "entities": [{"type": "object", "name": "dog", "attributes": []}], "events": []}})
+    first = rp.parse_query("a dog")
+    second = rp.parse_query("A dog ")
+    assert calls == ["a dog"] and [s.text for s in first.positive] == [s.text for s in second.positive]
