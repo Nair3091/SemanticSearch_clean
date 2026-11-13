@@ -2,6 +2,9 @@
 Negation-Aware Zero-Shot Text-to-Video Moment Retrieval Engine
 22AIE498 — Team 1 — Guide: Aiswarya S Kumar
 
+Describe a moment, including anything that must not be in it, and get its timestamp in a video.
+For example: `a person riding a bike without a helmet`.
+
 ## Team & Ownership
 
 | Track | Owner | Folder(s) |
@@ -10,20 +13,50 @@ Negation-Aware Zero-Shot Text-to-Video Moment Retrieval Engine
 | Track 2 — Vision & Retrieval | Dhruv Nair | `src/track2_vision_retrieval/` |
 | Track 3 — Fusion, Confidence & Web Demo | Ihsal Riyas | `src/track3_fusion_confidence/`, `Web App/` |
 
+## How It Works
+
+```
+query
+  │  Track 1: Qwen3 + adapter, or quick rules
+  ▼
+what must appear + what must not appear
+  │  Track 2: CLIP ViT-L/14 scores only what must appear
+  │           Pass 1 samples every 2s, Pass 2 every 0.25s around the best frames
+  ▼
+frame scores over time
+  │  Track 3: min-fusion, confidence threshold, then the ConCLIP ViT-B/32 absence check
+  ▼
+best moment with start and end times, or a rejection
+```
+
+Negated concepts never go to CLIP retrieval, because CLIP would look for the thing the user wants
+excluded. Instead, a frame passes the Track 3 check if its ConCLIP similarity to the excluded
+concept is low.
+
 ## Project Structure
 
 ```
-SemanticSearch/
+SemanticSearch_clean/
 ├── configs/
 │   └── config.yaml            # ALL shared parameters live here — no hardcoding in modules
 ├── data/
 │   ├── raw_videos/            # input video corpus (gitignored)
 │   ├── frame_cache/           # extracted frames (gitignored)
-│   └── faiss_index/           # persisted FAISS index (gitignored)
+│   ├── faiss_index/           # persisted FAISS index (gitignored)
+│   ├── conclip/               # ConCLIP weights (gitignored, see Setup)
+│   ├── benchmarks/            # saved Track 2 baseline
+│   └── results/               # saved score plots and tables
+├── docs/
+│   ├── OPTIMIZATION_PLAN.md   # what to change to make all three tracks faster
+│   └── CHANGES_SINCE_CLONE.md # everything changed since the first clone
 ├── scripts/
-│   └── run_pipeline.py        # THE end-to-end orchestrator — wires all 3 tracks together
+│   ├── run_pipeline.py        # THE end-to-end orchestrator — wires all 3 tracks together
+│   ├── demo_track1_track2.py  # prints Track 1 and Track 2 output for one video
+│   ├── benchmark_track2.py    # compares two-pass sampling with a full scan
+│   └── eval_*.py              # Track 2 score and threshold experiments
 ├── src/
 │   ├── common/
+│   │   ├── config.py          # loads configs/config.yaml
 │   │   └── types.py           # shared dataclasses (SubQuery, Frame, CandidateSegment, RetrievalResult)
 │   │                          # import these everywhere — don't redefine locally
 │   ├── track1_query_understanding/
@@ -34,12 +67,12 @@ SemanticSearch/
 │   │   ├── retriever.py           # retrieve(): the Track 2 entry point
 │   │   ├── sampling/two_pass_sampler.py
 │   │   ├── embedding/clip_encoder.py
-│   │   └── indexing/faiss_index.py
+│   │   └── indexing/faiss_index.py   # not used by retrieve() yet
 │   └── track3_fusion_confidence/
-│       ├── query_adapter.py       # splits sub-queries into CLIP queries and negation captions
+│       ├── query_adapter.py       # splits sub-queries into what must and must not appear
 │       ├── fusion_engine.py       # min-fusion and the final score
 │       ├── rejection.py           # confidence threshold
-│       ├── negation_filter.py     # ConCLIP negation check
+│       ├── negation_filter.py     # ConCLIP absence check
 │       ├── clip_exporter.py       # cuts the result to an .mp4
 │       └── recovery_layer.py      # not implemented yet
 ├── Web App/                   # local demo: upload a video, get the timestamp
@@ -68,31 +101,91 @@ SemanticSearch/
 
 ## Setup
 
+Tested on Python 3.11. The commands below are for Windows; on Linux or macOS, activate with
+`source .venv/bin/activate`.
+
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+```
+
+```bash
+.venv\Scripts\activate
+```
+
+```bash
 pip install -r requirements.txt
 ```
 
-Negation checking also needs the ConCLIP weights. Download `conclip_b32_openclip_version.pt` from the
-[NegBench models folder](https://drive.google.com/drive/folders/1kSEq0mkV1t1T8GuOAM65iz_iAA7e5gxB?usp=sharing)
+`requirements.txt` lists `faiss-gpu`. Without a CUDA GPU, replace it with `faiss-cpu` before installing.
+
+**Models.** Qwen3-1.7B (about 3.9 GB) and CLIP ViT-L/14 (about 1.6 GB) download automatically the
+first time they are used.
+
+**ConCLIP weights.** Negation checking also needs `conclip_b32_openclip_version.pt` (577 MB), which
+is too large for git. Download it from the `models/ConCLIP` folder of the
+[NegBench shared drive](https://drive.google.com/drive/folders/1kSEq0mkV1t1T8GuOAM65iz_iAA7e5gxB?usp=sharing)
 and save it as `data/conclip/conclip_b32_openclip_version.pt`.
 
-## Running the web demo
+Without this file everything else still runs, and the demo clearly marks results as "negation not checked".
+
+## Running the Web Demo
 
 ```bash
 python "Web App/app.py"
 ```
 
 This opens the demo at http://127.0.0.1:8000. On Windows you can also double-click
-`Web App/start_demo.bat`. On a CPU, expect about 1.5 minutes of Track 2 for a 20-second video, plus
-2 to 5 minutes of Track 1 if you choose the Qwen3 option.
+`Web App/start_demo.bat`.
 
-## Running the pipeline from the command line
+1. Drop in a short video.
+2. Describe what you are looking for.
+3. Choose how to parse the query. **Quick rules** is instant and handles simple queries such as
+   `a dog without a cat`. **Qwen3** runs the full Track 1 model and is much slower on a CPU.
+4. Click **Find the moment** to get the time range, a button to play it, and each track's output.
+
+## Running From the Command Line
 
 ```bash
 python scripts/run_pipeline.py --video data/raw_videos/sample.mp4 --query "a person riding a bike without a helmet"
 ```
 
-Add `--no-qwen` for rule-based query parsing, `--skip-negation-check` to run without ConCLIP, or
-`--export data/results/clip.mp4` to save the best moment as a clip.
+| Option | Effect |
+|---|---|
+| `--no-qwen` | Use rule-based query parsing |
+| `--skip-negation-check` | Run without ConCLIP; results say the negation was not checked |
+| `--export data/results/clip.mp4` | Save the best moment as a clip |
+
+## Running the Tests
+
+```bash
+python -m pytest tests
+```
+
+The tests use stand-ins for Qwen, CLIP and ConCLIP, so they check the logic and wiring but not search
+accuracy.
+
+## Current Status
+
+Tested on one 20-second video of four known scenes, on a CPU:
+
+| Check | Result |
+|---|---|
+| Finding the right scene with real CLIP | 4 of 4 |
+| Negation check on concepts not used to choose its cutoff | 23 of 24 |
+| Full searches with negation | 4 of 5 |
+
+These numbers come from one small video made from still photos, so they are not an accuracy measurement.
+
+Known limitations:
+
+- `confidence_threshold` and `frame_threshold` come from that one video and still need calibrating.
+  `segment_score_drop` and `fusion_weight` are uncalibrated placeholders.
+- Qwen3-1.7B often misses negation. The adapter fixes several of its mistakes, and the pipeline falls
+  back to rules if a negation word in the query was lost.
+- `recovery_layer.py` is still a stub, so a low-confidence result is rejected without a retry.
+- Temporal order such as "A then B" is extracted by Track 1 but not enforced.
+- CLIP scores single frames, so it recognises objects better than actions.
+- Things that aren't clear objects, such as smoke, are harder for the negation check.
+- Long negated phrases can match other things in the frame, which may wrongly reject a moment.
+
+Speed work is tracked in [docs/OPTIMIZATION_PLAN.md](docs/OPTIMIZATION_PLAN.md).
