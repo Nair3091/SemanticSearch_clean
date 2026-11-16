@@ -96,6 +96,12 @@ def retrieve(video_path: str, sub_queries: List[SubQuery]) -> FrameScores:
         bank = score_frames(F, _bank_embeddings(c["clip_model_name"]))
         confidence = softmax_confidence.confidence(S, bank, [q.text for q in sub_queries],
                                                    c["softmax_logit_scale"])
+        max_rank = c.get("attribute_max_rank", 3)
+        if max_rank:
+            for j, q in enumerate(sub_queries):
+                for variants in softmax_confidence.color_variants(q.text):
+                    V = score_frames(F, embed_text(variants))
+                    confidence[:, j] *= softmax_confidence.attribute_gate(S[:, j], V, max_rank)
     else:
         S = confidence = np.zeros((0, len(sub_queries)))
     return FrameScores(

@@ -16,6 +16,10 @@ vision_retrieval:
   faiss_index_path: "data/faiss_index/index.faiss"
   window_radius_seconds: 3.0
   softmax_logit_scale: 100.0   # CLIP's own temperature; used for the softmax confidence
+  # A query naming a colour ("a man in a red shirt") is only confident on frames where that colour
+  # ranks in the top N of 12 colours for the same phrase; 0 turns the check off. From one clip:
+  # wrong colours ranked 6-12, right ones 1-3. Still to calibrate on more videos.
+  attribute_max_rank: 3
   # Videos up to this long get every Pass-2 frame embedded up front (on upload, or while Qwen runs),
   # so later queries only score frames. Longer videos get Pass 1 up front and Pass 2 per query.
   preindex_full_max_seconds: 60

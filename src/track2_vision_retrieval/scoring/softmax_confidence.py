@@ -99,6 +99,36 @@ def competitors(query: str) -> np.ndarray:
     return np.array(keep, dtype=bool)
 
 
+# Attribute check. The distractors above are objects, so they cannot tell "a man in a red shirt"
+# from a man in a pink shirt: both beat "a cup" easily. For a query that names a colour, the frame
+# must also rank the query's colour among the top `max_rank` of the same phrase in these colours.
+# Measured on one night-time clip: wrong colours ranked 6-12 of 12, right ones 1-3.
+COLORS = ["red", "pink", "orange", "yellow", "green", "blue", "purple", "brown",
+          "black", "white", "grey", "beige"]
+_COLOR_ALIASES = {"gray": "grey", "violet": "purple", "navy": "blue", "maroon": "red",
+                  "crimson": "red", "scarlet": "red", "tan": "beige", "cream": "beige"}
+
+
+def color_variants(query: str) -> List[List[str]]:
+    """One list per colour word in the query: the query with that word swapped for each other
+    colour. [] when the query names no colour."""
+    out = []
+    for m in re.finditer(r"[A-Za-z]+", query):
+        word = m.group(0).lower()
+        color = _COLOR_ALIASES.get(word, word)
+        if color not in COLORS:
+            continue
+        out.append([query[:m.start()] + other + query[m.end():] for other in COLORS if other != color])
+    return out
+
+
+def attribute_gate(query_scores: np.ndarray, variant_scores: np.ndarray, max_rank: int) -> np.ndarray:
+    """query_scores: (N,) raw cosine for the query; variant_scores: (N, K) for its colour variants.
+    Returns (N,) 1.0 where the query's colour ranks within the top `max_rank`, else 0.0."""
+    rank = 1 + (variant_scores > query_scores[:, None]).sum(axis=1)
+    return (rank <= max_rank).astype(np.float32)
+
+
 def confidence(query_scores: np.ndarray, bank_scores: np.ndarray, queries: Sequence[str],
                logit_scale: float) -> np.ndarray:
     """query_scores: (N, M) raw cosine for M queries. bank_scores: (N, len(BANK)) raw cosine for the
