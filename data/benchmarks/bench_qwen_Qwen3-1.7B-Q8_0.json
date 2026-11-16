@@ -1,0 +1,126 @@
+[
+  {
+    "query": "a dog looking at a crab",
+    "seconds": 9.57,
+    "sub_queries": [
+      [
+        "a dog looking a crab",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a dog looking at a crab\",\n    \"entities\": [\n        {\n            \"type\": \"animal\",\n            \"name\": \"dog\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"animal\",\n            \"name\": \"crab\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"looking\",\n            \"subject\": \"dog\",\n            \"object\": \"crab\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "a dog without a cat",
+    "seconds": 5.95,
+    "sub_queries": [
+      [
+        "a dog",
+        false
+      ],
+      [
+        "a cat",
+        true
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a dog without a cat\",\n    \"entities\": [\n        {\n            \"type\": \"animal\",\n            \"name\": \"dog\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"animal\",\n            \"name\": \"cat\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "a person riding a bike without a helmet",
+    "seconds": 12.63,
+    "sub_queries": [
+      [
+        "a person riding a bike",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a person riding a bike without a helmet\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"person\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"bike\",\n            \"attributes\": [\"without a helmet\"]\n        },\n        {\n            \"type\": \"vehicle\",\n            \"name\": \"bike\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"riding\",\n            \"subject\": \"person\",\n            \"object\": \"bike\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "a woman drinking coffee without wearing glasses",
+    "seconds": 12.56,
+    "sub_queries": [
+      [
+        "a woman drinking a coffee",
+        false
+      ],
+      [
+        "a glasses",
+        true
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a woman drinking coffee without wearing glasses\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"woman\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"coffee\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"location\",\n            \"name\": \"table\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"clothing\",\n            \"name\": \"glasses\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"drinking\",\n            \"subject\": \"woman\",\n            \"object\": \"coffee\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "A man wearing a red top hat entered a white car",
+    "seconds": 12.14,
+    "sub_queries": [
+      [
+        "a tall man entering a white car",
+        false
+      ],
+      [
+        "a red top hat",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"A man wearing a red top hat entered a white car\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"man\",\n            \"attributes\": [\"tall\"]\n        },\n        {\n            \"type\": \"clothing\",\n            \"name\": \"hat\",\n            \"attributes\": [\"red\", \"top\"]\n        },\n        {\n            \"type\": \"vehicle\",\n            \"name\": \"car\",\n            \"attributes\": [\"white\"]\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"entering\",\n            \"subject\": \"man\",\n            \"object\": \"car\",\n            \"attributes\": [\"red hat\", \"white\"],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "a woman picked up a bag and then entered a car",
+    "seconds": 16.34,
+    "sub_queries": [
+      [
+        "a woman picked up a bag",
+        false
+      ],
+      [
+        "a woman entered a car",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a woman picked up a bag and then entered a car\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"woman\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"bag\",\n            \"attributes\": [\"picked up\"]\n        },\n        {\n            \"type\": \"vehicle\",\n            \"name\": \"car\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"picked up\",\n            \"subject\": \"woman\",\n            \"object\": \"bag\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        },\n        {\n            \"event_id\": 2,\n            \"action\": \"entered\",\n            \"subject\": \"woman\",\n            \"object\": \"car\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [\n        {\n            \"relation\": \"before\",\n            \"event1\": 1,\n            \"event2\": 2\n        }\n    ],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "a man in a black jacket walking a dog but not on a leash",
+    "seconds": 11.6,
+    "sub_queries": [
+      [
+        "a black man walking a dog",
+        false
+      ],
+      [
+        "a black jacket",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"a man in a black jacket walking a dog but not on a leash\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"man\",\n            \"attributes\": [\"black\"]\n        },\n        {\n            \"type\": \"clothing\",\n            \"name\": \"jacket\",\n            \"attributes\": [\"black\"]\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"dog\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"walking\",\n            \"subject\": \"man\",\n            \"object\": \"dog\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [],\n    \"negations\": []\n}"
+  },
+  {
+    "query": "two kids playing football in a park and then a dog runs onto the field",
+    "seconds": 19.66,
+    "sub_queries": [
+      [
+        "a kid playing a football",
+        false
+      ],
+      [
+        "a dog running a field",
+        false
+      ],
+      [
+        "a park",
+        false
+      ]
+    ],
+    "error": null,
+    "raw": "{\n    \"original_query\": \"two kids playing football in a park and then a dog runs onto the field\",\n    \"entities\": [\n        {\n            \"type\": \"person\",\n            \"name\": \"kid\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"person\",\n            \"name\": \"kid\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"football\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"location\",\n            \"name\": \"park\",\n            \"attributes\": []\n        },\n        {\n            \"type\": \"object\",\n            \"name\": \"dog\",\n            \"attributes\": []\n        }\n    ],\n    \"events\": [\n        {\n            \"event_id\": 1,\n            \"action\": \"playing\",\n            \"subject\": \"kid\",\n            \"object\": \"football\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        },\n        {\n            \"event_id\": 2,\n            \"action\": \"running\",\n            \"subject\": \"dog\",\n            \"object\": \"field\",\n            \"attributes\": [],\n            \"relations\": [],\n            \"negated\": false\n        }\n    ],\n    \"temporal_relations\": [\n        {\n            \"relation\": \"after\",\n            \"event1\": 1,\n            \"event2\": 2\n        }\n    ],\n    \"negations\": []\n}"
+  }
+]

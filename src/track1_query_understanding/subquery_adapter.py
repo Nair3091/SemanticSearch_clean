@@ -18,6 +18,9 @@ Rules (deliberately simple and printed back as a trace so they can be inspected)
   2c. Qwen sometimes stores the negation word as an attribute ("without" on "helmet") or invents
      an entity the query never mentions ("a road"). The word is removed from the attributes and
      the entity counts as negated; an invented entity that no event uses is dropped.
+     Any attribute containing a negation word ("without a helmet") is dropped too.
+  2d. An event marked negated whose action and object both come before the first negation word
+     in the query is a misparse (the 4-bit model does this) and is treated as positive.
   3. If nothing could be extracted, fall back to the raw query as one positive sub-query.
   4. At most `max_sub_queries` are kept (config: query_understanding.max_sub_queries),
      always keeping at least one positive.
@@ -40,9 +43,39 @@ def _clean(value):
     return None if s.lower() in _MISSING else s
 
 
+def _has_negation(text: str) -> bool:
+    return bool(set(re.findall(r"[a-z']+", str(text).lower())) & NEGATION_WORDS)
+
+
+def _negation_supported(query: str, action, obj) -> bool:
+    """A negated event is believable only if its action or object comes AFTER a negation word
+    in the query ("did not enter the car", "without wearing a hat"). A quantized Qwen sometimes
+    puts the negation on the only event it has ("drinking coffee without wearing glasses" ->
+    drinking negated), where both come before the negation word."""
+    words = re.findall(r"[a-z0-9']+", query.lower())
+    neg = [i for i, w in enumerate(words) if w in NEGATION_WORDS or w.endswith("n't")]
+    if not neg:
+        return True                       # nothing to check against; trust Track 1
+    first = neg[0]
+    targets = []
+    if obj:
+        targets += [("word", w) for w in str(obj).lower().split()]
+    if action:
+        stem = str(action).lower().split()[0][:4]
+        if len(stem) >= 3:
+            targets.append(("stem", stem))
+    if not targets:
+        return True
+    for i in range(first + 1, len(words)):
+        for kind, t in targets:
+            if (kind == "word" and words[i] == t) or (kind == "stem" and words[i].startswith(t)):
+                return True
+    return False
+
+
 def _noun_phrase(name: str, attributes) -> str:
     attrs = [str(a).strip() for a in (attributes or [])
-             if str(a).strip() and str(a).strip().lower() not in NEGATION_WORDS]
+             if str(a).strip() and not _has_negation(a)]
     words = " ".join(attrs + [name])
     article = "an" if words[:1].lower() in "aeiou" else "a"
     return f"{article} {words}"
@@ -120,7 +153,11 @@ def structured_to_subqueries(structured, original_query: str,
         subj, obj = _clean(ev.get("subject")), _clean(ev.get("object"))
         action = _clean(ev.get("action"))
         ev_negated = bool(ev.get("negated", False))
-        hit = [n for n in (subj, obj) if n and n.lower() in query_negated]
+        if ev_negated and not _negation_supported(original_query, action, obj):
+            trace.append(f"event {ev.get('event_id', '?')}: negation removed, its action and "
+                         f"object come before the negation word in the query")
+            ev_negated = False
+        hit =[n for n in (subj, obj) if n and n.lower() in query_negated]
         if hit and not ev_negated:
             # Track 1 missed the negation word: the event is a misparse, so the entities
             # fall through to the entity rules below.

@@ -138,3 +138,36 @@ def test_multi_word_action_copied_as_attribute_is_dropped():
          "events": [{"event_id": 1, "action": "picked up", "subject": "woman", "object": "suitcase", "negated": False}]}
     assert _texts(structured_to_subqueries(s, "a woman picked up a large suitcase")[0]) == \
         [("a woman picked up a large suitcase", False)]
+
+
+def test_misplaced_negation_on_positive_event_is_removed():
+    # 4-bit Qwen put "without" on the only event: drinking coffee came back negated
+    s = {"entities": [{"type": "person", "name": "woman", "attributes": []},
+                      {"type": "object", "name": "coffee", "attributes": []},
+                      {"type": "clothing", "name": "glasses", "attributes": []}],
+         "events": [{"event_id": 1, "action": "drinking", "subject": "woman", "object": "coffee",
+                     "negated": True}],
+         "negations": [{"event_id": 1, "trigger": "without"}]}
+    sq, trace = structured_to_subqueries(s, "a woman drinking coffee without wearing glasses")
+    assert _texts(sq) == [("a woman drinking a coffee", False), ("a glasses", True)]
+    assert any("negation removed" in t for t in trace)
+
+
+def test_real_negated_event_is_kept():
+    s = {"entities": [{"type": "person", "name": "man", "attributes": []},
+                      {"type": "vehicle", "name": "car", "attributes": []}],
+         "events": [{"event_id": 1, "action": "entering", "subject": "man", "object": "car",
+                     "negated": True}]}
+    sq, _ = structured_to_subqueries(s, "A man did not enter the car")
+    assert _texts(sq) == [("a man entering a car", True)]
+
+
+def test_attribute_with_negation_phrase_is_dropped():
+    # 4-bit Qwen stored "without a helmet" as an attribute of bike
+    s = {"entities": [{"type": "person", "name": "person", "attributes": []},
+                      {"type": "vehicle", "name": "bike", "attributes": ["without a helmet"]},
+                      {"type": "clothing", "name": "helmet", "attributes": []}],
+         "events": [{"event_id": 1, "action": "riding", "subject": "person", "object": "bike",
+                     "negated": False}]}
+    sq, _ = structured_to_subqueries(s, "a person riding a bike without a helmet")
+    assert _texts(sq) == [("a person riding a bike", False), ("a helmet", True)]

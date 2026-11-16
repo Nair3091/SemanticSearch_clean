@@ -92,7 +92,7 @@
       <label for="query" style="margin-top:0">What are you looking for?</label>
       <input type="text" id="query" maxlength="300" placeholder="a dog running without a leash" autocomplete="off">
       <label>Track 1 query understanding</label>
-      <label class="choice"><input type="radio" name="track1" value="qwen" checked><span>Qwen3 model<small id="qwenNote">Full Track 1. About 1.5 minutes per new query on a CPU; repeated queries are instant.</small></span></label>
+      <label class="choice"><input type="radio" name="track1" value="qwen" checked><span>Qwen3 model<small id="qwenNote">Full Track 1. Repeated queries are instant.</small></span></label>
       <label class="choice"><input type="radio" name="track1" value="rules"><span>Quick rules<small>Instant, for simple queries such as "a dog without a cat".</small></span></label>
       <div style="margin-top:14px"><button id="go" type="submit" disabled>Find the moment</button></div>
     </form>
@@ -407,7 +407,10 @@ function watchModels() {
 watchModels();
 
 fetch("/api/status").then(r => r.json()).then(s => {
-  $("qwenNote").textContent = `Full Track 1 (${s.qwen_model}). About 1.5 to 2 minutes per new query on a CPU; repeated queries are instant.`;
+  const quantized = /\.gguf$/i.test(s.qwen_model || "");
+  const modelName = quantized ? "Qwen3-1.7B, 4-bit" : s.qwen_model;
+  const speed = quantized ? "About 5 to 15 seconds" : "About 1.5 to 2 minutes";
+  $("qwenNote").textContent = `Full Track 1 (${modelName}). ${speed} per new query on a CPU; repeated queries are instant.`;
   if (!s.negation_ready) {
     $("negWarning").textContent = `Track 3 negation check is not available: ${s.negation_reason}. Queries with negation will be marked as not checked.`;
     show("negWarning");

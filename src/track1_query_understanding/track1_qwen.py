@@ -30,11 +30,67 @@ NOTEBOOK_INPUT_CAP = 4096
 
 _state = {"model": None, "tokenizer": None, "device": None, "name": None, "last_raw": None}
 
+GGUF_CONTEXT = 6144            # ~2,900 prompt tokens + MAX_NEW_TOKENS, with room to spare
+GGUF_TOKENIZER = DEFAULT_MODEL  # chat template source, so both backends get the identical prompt
+
+
+def _is_gguf(model_name):
+    return str(model_name).lower().endswith(".gguf")
+
+
+def _physical_cores():
+    try:
+        import psutil
+        return psutil.cpu_count(logical=False) or 4
+    except ImportError:
+        import os
+        return max(1, (os.cpu_count() or 8) // 2)
+
+
+def _load_gguf(model_name):
+    """A quantized GGUF through llama.cpp: much faster per token on CPU than fp32 transformers.
+    llama.cpp keeps the previous prompt's KV cache and reuses the longest common prefix, which
+    does the job of _prefix_cache() for the fixed ~2,800-token prompt."""
+    import os
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    from llama_cpp import Llama
+    from transformers import AutoTokenizer
+
+    path = model_name
+    if not os.path.isabs(path):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(root, path)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"GGUF model not found: {path}")
+    model = Llama(model_path=path, n_ctx=GGUF_CONTEXT, n_threads=_physical_cores(),
+                  n_batch=512, verbose=False)
+    import atexit
+    atexit.register(model.close)   # else Llama.__del__ prints a traceback at interpreter exit
+    tokenizer = AutoTokenizer.from_pretrained(GGUF_TOKENIZER)
+    _state.update(model=model, tokenizer=tokenizer, device="cpu (llama.cpp)", name=model_name,
+                  prefix_key=None, prefix_ids=None, prefix_past=None)
+    return model_name, _state["device"]
+
 
 def load_model(model_name=DEFAULT_MODEL):
-    """Load tokenizer + model once. fp16 on CUDA, fp32 on CPU (same as the notebook)."""
+    """Load tokenizer + model once. fp16 on CUDA, fp32 on CPU (same as the notebook).
+    A path ending in .gguf loads that quantized model through llama.cpp instead."""
     if _state["model"] is not None and _state["name"] == model_name:
         return model_name, _state["device"]
+    if _state["model"] is not None and _state.get("alias") == model_name:
+        return _state["name"], _state["device"]      # this GGUF failed before: stay on fp32
+    if _is_gguf(model_name):
+        try:
+            return _load_gguf(model_name)
+        except (ImportError, FileNotFoundError, OSError, ValueError) as exc:
+            # Missing file or llama-cpp-python on this machine: keep the demo working on fp32.
+            print(f"  [qwen] could not load {model_name} ({exc}); falling back to {DEFAULT_MODEL}")
+            if _state["model"] is not None and _state["name"] == DEFAULT_MODEL:
+                _state["alias"] = model_name
+                return DEFAULT_MODEL, _state["device"]
+            result = load_model(DEFAULT_MODEL)
+            _state["alias"] = model_name
+            return result
     import os
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     import torch
@@ -89,6 +145,9 @@ def warm_up(model_name=DEFAULT_MODEL):
         [{"role": "system", "content": SYSTEM_MESSAGE},
          {"role": "user", "content": PROMPT_FINAL + "\n\n" + QUERY_MARKER + "x"}],
         tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    if _is_gguf(_state["name"]):
+        _state["model"].create_completion(text, max_tokens=1, temperature=0.0)  # fills the KV cache
+        return
     _prefix_cache(text, tokenizer(text, return_tensors="pt")["input_ids"].to(_state["device"]))
 
 
@@ -105,6 +164,8 @@ def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
     formatted_text = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
     )
+    if _is_gguf(_state["name"]):
+        return _ask_gguf(formatted_text, max_new_tokens, verbose)
     inputs = tokenizer(formatted_text, return_tensors="pt")          # no truncation
     input_tokens = inputs["input_ids"].shape[1]
     if input_tokens > MAX_INPUT_TOKENS:
@@ -149,6 +210,28 @@ def ask_qwen(prompt, max_new_tokens=MAX_NEW_TOKENS, verbose=True):
     if device == "cuda":
         torch.cuda.empty_cache()
     gc.collect()
+    return response
+
+
+def _ask_gguf(formatted_text, max_new_tokens, verbose):
+    llm = _state["model"]
+    input_tokens = len(llm.tokenize(formatted_text.encode("utf-8"), add_bos=False, special=True))
+    if input_tokens + max_new_tokens > GGUF_CONTEXT:
+        raise ValueError(f"Prompt is {input_tokens} tokens, over the {GGUF_CONTEXT - max_new_tokens} limit.")
+    start = time.time()
+    out = llm.create_completion(
+        formatted_text,
+        max_tokens=max_new_tokens,
+        temperature=0.0,             # greedy, like do_sample=False
+        repeat_penalty=1.05,
+        stop=["<|im_end|>", "<|endoftext|>"],
+    )
+    elapsed = time.time() - start
+    response = out["choices"][0]["text"].strip()
+    _state["last_raw"] = response
+    if verbose:
+        n = out.get("usage", {}).get("completion_tokens", "?")
+        print(f"  [qwen gguf] {input_tokens} input tokens, {n} new tokens, {elapsed:.1f}s")
     return response
 
 

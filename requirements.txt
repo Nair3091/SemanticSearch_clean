@@ -1,6 +1,10 @@
 # Track 1 — Query Understanding
 torch
 transformers
+# 4-bit Qwen (configs/config.yaml). Windows without a compiler: prebuilt CPU wheel via
+#   pip install llama-cpp-python --only-binary=llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+# Model file: unsloth/Qwen3-1.7B-GGUF, Qwen3-1.7B-Q4_K_M.gguf -> data/models/ (falls back to fp32 if missing)
+llama-cpp-python
 
 # Track 2 — Vision & Retrieval
 opencv-python

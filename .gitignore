@@ -15,6 +15,7 @@ data/faiss_index/*
 *.pt
 *.bin
 *.safetensors
+*.gguf
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db

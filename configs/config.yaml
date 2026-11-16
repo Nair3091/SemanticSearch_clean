@@ -2,7 +2,10 @@
 # Anyone changing a default should update this file so the whole team stays in sync.
 
 query_understanding:
-  qwen3_model_name: "Qwen/Qwen3-1.7B"
+  # 4-bit Qwen3-1.7B through llama.cpp: ~13x faster than fp32 on CPU with the same or better parses
+  # (scripts/bench_qwen_backends.py). Falls back to "Qwen/Qwen3-1.7B" (fp32) if the file or
+  # llama-cpp-python is missing. Get it: unsloth/Qwen3-1.7B-GGUF, Qwen3-1.7B-Q4_K_M.gguf
+  qwen3_model_name: "data/models/Qwen3-1.7B-Q4_K_M.gguf"
   max_sub_queries: 5
 
 vision_retrieval:
