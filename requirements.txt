@@ -1,4 +1,9 @@
 # Track 1 — Query Understanding
+# GPU (optional, NVIDIA): install the CUDA build of PyTorch first, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+# and the CUDA build of llama-cpp-python (prebuilt wheels: .../whl/cu121 to cu125), e.g.
+#   pip install llama-cpp-python --only-binary=llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+# With hardware.device "auto" the code uses the GPU when present and the CPU otherwise.
 torch
 transformers
 # 4-bit Qwen (configs/config.yaml). Windows without a compiler: prebuilt CPU wheel via

@@ -131,6 +131,8 @@ class ConCLIPNegationFilter:
 
         self._torch = torch
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device == "auto":
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         if self.device == "cuda" and not torch.cuda.is_available():
             self.device = "cpu"
 

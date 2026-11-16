@@ -47,8 +47,32 @@ def _physical_cores():
         return max(1, (os.cpu_count() or 8) // 2)
 
 
+def _gpu_layers():
+    """hardware.qwen_gpu_layers from the config: -1 = all layers on the GPU, 0 = CPU only."""
+    try:
+        from src.common.config import load_config
+        hw = load_config().get("hardware", {})
+        if hw.get("device") == "cpu":
+            return 0
+        return int(hw.get("qwen_gpu_layers", -1))
+    except Exception:          # no config (e.g. used standalone): offload when possible
+        return -1
+
+
+def _gpu_offload_supported():
+    """True when this llama-cpp-python build can use a GPU (the CPU-only wheel cannot)."""
+    try:
+        import llama_cpp
+        return bool(llama_cpp.llama_supports_gpu_offload())
+    except Exception:
+        return False
+
+
 def _load_gguf(model_name):
-    """A quantized GGUF through llama.cpp: much faster per token on CPU than fp32 transformers.
+    """A quantized GGUF through llama.cpp: much faster per token than fp32 transformers.
+    Runs on the GPU when the installed llama-cpp-python was built with CUDA (all layers by
+    default, hardware.qwen_gpu_layers), otherwise on the CPU. If loading onto the GPU fails,
+    for example from running out of GPU memory, it loads on the CPU instead.
     llama.cpp keeps the previous prompt's KV cache and reuses the longest common prefix, which
     does the job of _prefix_cache() for the fixed ~2,800-token prompt."""
     import os
@@ -62,12 +86,25 @@ def _load_gguf(model_name):
         path = os.path.join(root, path)
     if not os.path.exists(path):
         raise FileNotFoundError(f"GGUF model not found: {path}")
-    model = Llama(model_path=path, n_ctx=GGUF_CONTEXT, n_threads=_physical_cores(),
-                  n_batch=512, verbose=False)
+
+    def build(gpu_layers):
+        return Llama(model_path=path, n_ctx=GGUF_CONTEXT, n_threads=_physical_cores(),
+                     n_batch=512, n_gpu_layers=gpu_layers, verbose=False)
+
+    layers = _gpu_layers() if _gpu_offload_supported() else 0
+    device = "gpu (llama.cpp)" if layers != 0 else "cpu (llama.cpp)"
+    try:
+        model = build(layers)
+    except Exception as exc:
+        if layers == 0:
+            raise
+        print(f"  [qwen] loading on the GPU failed ({exc}); using the CPU")
+        model, device = build(0), "cpu (llama.cpp)"
+    print(f"[Track1/Qwen] {os.path.basename(path)} on {device}")
     import atexit
     atexit.register(model.close)   # else Llama.__del__ prints a traceback at interpreter exit
     tokenizer = AutoTokenizer.from_pretrained(GGUF_TOKENIZER)
-    _state.update(model=model, tokenizer=tokenizer, device="cpu (llama.cpp)", name=model_name,
+    _state.update(model=model, tokenizer=tokenizer, device=device, name=model_name,
                   prefix_key=None, prefix_ids=None, prefix_past=None)
     return model_name, _state["device"]
 
@@ -105,6 +142,7 @@ def load_model(model_name=DEFAULT_MODEL):
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype, low_cpu_mem_usage=True)
     model.to(device)
     model.eval()
+    print(f"[Track1/Qwen] {model_name} on {device}")
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     _state.update(model=model, tokenizer=tokenizer, device=device, name=model_name,

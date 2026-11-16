@@ -68,6 +68,7 @@
 <header>
   <h1>SemanticSearch</h1>
   <p>Find a moment in a video by describing it, including what must not be in it.</p>
+  <p class="hidden" id="deviceNote" style="font-size: 0.85em"></p>
 </header>
 <main>
   <div class="wide hidden notice warn" id="negWarning"></div>
@@ -401,16 +402,30 @@ function watchModels() {
       ? "Loading the models in the background (about 1 to 2 minutes). You can start a search now; it will begin when loading finishes."
       : `Some models could not be preloaded (${s.models}). Searches will load them when needed.`;
     show("modelNote", loading || s.models.startsWith("failed"));
+    describeModels(s);
     if (loading) setTimeout(watchModels, 3000);
   }).catch(() => {});
 }
 watchModels();
 
-fetch("/api/status").then(r => r.json()).then(s => {
+function describeModels(s) {
+  const dev = s.devices || {};
+  const onGpu = d => /gpu|cuda/i.test(d || "");
   const quantized = /\.gguf$/i.test(s.qwen_model || "");
   const modelName = quantized ? "Qwen3-1.7B, 4-bit" : s.qwen_model;
-  const speed = quantized ? "About 5 to 15 seconds" : "About 1.5 to 2 minutes";
-  $("qwenNote").textContent = `Full Track 1 (${modelName}). ${speed} per new query on a CPU; repeated queries are instant.`;
+  const gpuQwen = onGpu(dev.qwen);
+  const speed = quantized ? (gpuQwen ? "About 1 to 3 seconds" : "About 5 to 15 seconds")
+                          : (gpuQwen ? "About 5 to 10 seconds" : "About 1.5 to 2 minutes");
+  const where = dev.qwen ? (gpuQwen ? " on the GPU" : " on the CPU") : "";
+  $("qwenNote").textContent = `Full Track 1 (${modelName}). ${speed} per new query${where}; repeated queries are instant.`;
+  const parts = [["CLIP", dev.clip], ["Qwen", dev.qwen], ["ConCLIP", dev.conclip]]
+    .filter(([, d]) => d).map(([name, d]) => `${name} on ${onGpu(d) ? "GPU" : "CPU"}`);
+  $("deviceNote").textContent = parts.length ? "Running: " + parts.join(" · ") : "";
+  show("deviceNote", parts.length > 0);
+}
+
+fetch("/api/status").then(r => r.json()).then(s => {
+  describeModels(s);
   if (!s.negation_ready) {
     $("negWarning").textContent = `Track 3 negation check is not available: ${s.negation_reason}. Queries with negation will be marked as not checked.`;
     show("negWarning");

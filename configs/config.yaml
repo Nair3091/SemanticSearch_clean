@@ -54,4 +54,9 @@ recovery:
   window_widen_factor: 1.5
 
 hardware:
-  device: "cuda"   # "cuda" or "cpu"
+  # "auto": CLIP and ConCLIP use an NVIDIA GPU when PyTorch has CUDA, otherwise the CPU.
+  # "cpu" forces the CPU. Needs the CUDA build of PyTorch (see requirements.txt).
+  device: "auto"
+  # Layers of the 4-bit Qwen to put on the GPU: -1 = all, 0 = none (CPU only). Ignored by the
+  # CPU-only build of llama-cpp-python; if loading on the GPU fails, Qwen falls back to the CPU.
+  qwen_gpu_layers: -1

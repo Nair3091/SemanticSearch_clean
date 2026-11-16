@@ -10,11 +10,18 @@ from src.common.types import Frame
 _cfg = load_config()
 _MODEL_NAME = _cfg["vision_retrieval"]["clip_model_name"]
 _requested = _cfg["hardware"]["device"]
-if _requested == "cuda" and not torch.cuda.is_available():
-    print("WARNING: cuda requested in config but not available, falling back to CPU")
-    _DEVICE = "cpu"
+if _requested in ("auto", "cuda"):
+    # "auto" (and "cuda") use an NVIDIA GPU when PyTorch can see one, otherwise the CPU
+    _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    if _requested == "cuda" and _DEVICE == "cpu":
+        print("WARNING: cuda requested in config but not available, falling back to CPU")
 else:
     _DEVICE = _requested
+
+
+def device() -> str:
+    """Where CLIP runs: "cuda" or "cpu"."""
+    return _DEVICE
 
 _model = None
 _processor = None
@@ -27,6 +34,8 @@ def _load_model():
         if _model is None:
             model = CLIPModel.from_pretrained(_MODEL_NAME).to(_DEVICE)
             model.eval()
+            gpu = f" ({torch.cuda.get_device_name(0)})" if _DEVICE == "cuda" else ""
+            print(f"[Track2/CLIP] {_MODEL_NAME} on {_DEVICE}{gpu}")
             _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
             _model = model
     return _model, _processor

@@ -166,7 +166,24 @@ def status():
     ready, reason = run_pipeline.negation_status(cfg)
     return {"negation_ready": ready, "negation_reason": reason, "models": _models["state"],
             "qwen_model": cfg["query_understanding"]["qwen3_model_name"],
-            "clip_model": cfg["vision_retrieval"]["clip_model_name"]}
+            "clip_model": cfg["vision_retrieval"]["clip_model_name"],
+            "devices": model_devices()}
+
+
+def model_devices():
+    """Where each loaded model runs ("cuda"/"gpu" or "cpu"); None until it has loaded."""
+    import sys as _sys
+    out = {"clip": None, "qwen": None, "conclip": None}
+    clip = _sys.modules.get("src.track2_vision_retrieval.embedding.clip_encoder")
+    if clip is not None and getattr(clip, "_model", None) is not None:
+        out["clip"] = clip.device()
+    qwen = _sys.modules.get("src.track1_query_understanding.track1_qwen")
+    if qwen is not None and qwen._state.get("model") is not None:
+        out["qwen"] = qwen._state.get("device")
+    neg = getattr(run_pipeline, "_negation_filter", None)
+    if neg is not None:
+        out["conclip"] = getattr(neg, "device", None)
+    return out
 
 
 @app.post("/api/videos")

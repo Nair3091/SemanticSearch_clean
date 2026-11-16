@@ -136,6 +136,13 @@ and save it as `data/conclip/conclip_b32_openclip_version.pt`.
 
 Without this file everything else still runs, and the demo clearly marks results as "negation not checked".
 
+**GPU (optional).** With `hardware.device: "auto"` (the default), CLIP and ConCLIP run on an NVIDIA GPU
+whenever the CUDA build of PyTorch is installed, and the 4-bit Qwen runs on it when the CUDA build of
+llama-cpp-python is installed (install commands are in `requirements.txt`). Without them everything runs
+on the CPU, and if Qwen cannot load onto the GPU it falls back to the CPU. The console prints where each
+model runs (`[Track2/CLIP] ... on cuda`), and the web page shows it under the title. Set `device: "cpu"`
+to force the CPU, or `qwen_gpu_layers: 0` to keep only Qwen on the CPU.
+
 ## Running the Web Demo
 
 ```bash
